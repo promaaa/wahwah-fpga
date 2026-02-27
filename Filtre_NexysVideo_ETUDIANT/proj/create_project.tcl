@@ -50,8 +50,15 @@ if {[string equal [get_filesets -quiet constrs_1] ""]} {
 set obj [get_filesets sources_1]
 set_property "ip_repo_paths" "[file normalize $repo_dir]" $obj
 
-# Add conventional sources
-add_files -quiet $src_dir/hdl
+# Add conventional sources (explicit list to avoid missing HDL units)
+set hdl_vhd [glob -nocomplain $src_dir/hdl/*.vhd]
+set hdl_v   [glob -nocomplain $src_dir/hdl/*.v]
+if {[llength $hdl_vhd] > 0} {
+  add_files -quiet $hdl_vhd
+}
+if {[llength $hdl_v] > 0} {
+  add_files -quiet $hdl_v
+}
 
 # Add IPs
 add_files -quiet [glob -nocomplain ../src/ip/*/*.xci]
