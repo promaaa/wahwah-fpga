@@ -1,35 +1,30 @@
 flowchart LR
-    ADC["Codec ADC"] --> I2S_RX["Interface I2S RX"]
-    I2S_RX --> AUDIO_IN["Flux audio stéréo"]
+    I2S_RX["Interface I2S RX - D_L_O / D_R_O : 24 bits"] --> AUDIO_IN["Flux audio stéréo - Fs = 48 kHz"]
 
-    subgraph DSP["Chaîne DSP (par canal L/R)"]
-        AUDIO_IN --> PREP["Pré-traitement\n(alignement/format)"]
-        PREP --> SEL_FX{"Bypass effet ?"}
+    subgraph DSP["Chaîne DSP LUT-optimisée (dupliquée L/R)"]
+        AUDIO_IN --> PREP["Pré-traitement - 24 -> 16 bits signés (MSB extraction)"]
 
-        subgraph CTRL["Génération contrôle wah"]
-            LFO["LFO basse fréquence"]
-            MAP["Mapping expo\n0..1 -> fc"]
-            LFO --> MAP
+        subgraph CTRL["Contrôle de l'index LUT"]
+            UI["UI (switches) - config_sw[2:0] : vitesse LFO - config_sw[4] : bypass effet"] --> LFO
+            LFO["LFO numérique - Accu phase : 32 bits - 8 vitesses : 0.5..5.0 Hz"] --> SCALE["Mise à l'échelle - index = phase[31:24] - 8 bits => 0..255"]
         end
 
-        subgraph COEFF["Calcul coefficients"]
-            COEF["Coefficients biquad\n(b0,b1,b2,a1,a2)"]
+        subgraph MEM["Mémoire coefficients"]
+            LUT[("ROM coeffs - Profondeur : 256 - Largeur : 3 x 16 bits - Format : Q1.14 - Sorties : b0, -a1, -a2")]
         end
 
-        MAP --> COEF
-        PREP --> IIR["Filtre IIR résonant\n(Biquad passe-bande)"]
-        COEF --> IIR
+        SCALE -->|"index[7:0]"| LUT
+        LUT -->|"b0, -a1, -a2"| IIR
 
-        IIR --> SEL_FX
-        SEL_FX --> POST["Post-traitement\n(gain/saturation)"]
+        PREP --> IIR["Filtre IIR biquad DF1 - Ordre 2 - Entrée/sortie : 16 bits - MAC : 4 cycles/échantillon - Accu : 36 bits - Shift : >>14 + saturation"]
+        IIR --> SEL_FX{"Bypass ? - config_sw[4]"}
+        PREP --> SEL_FX
+        SEL_FX --> POST["Post-traitement - Alignement vers 24 bits"]
     end
 
-    POST --> MIX["Mix / routage"]
-    MIX --> I2S_TX["Interface I2S TX"]
-    I2S_TX --> DAC["Codec DAC"]
+    POST --> MIX["Mix / routage global - Bouton : dry/wet global"]
+    MIX --> I2S_TX["Interface I2S TX - D_L_I / D_R_I : 24 bits"]
 
-    UI["Commandes utilisateur\n(sw/boutons)"] --> LFO
-    UI --> SEL_FX
-    CLK["Horloges\n(100MHz, Fs)"] --> I2S_RX
+    CLK["Horloges - CLK sys : 100 MHz - MCLK/BCLK/LRCLK codec - Cadence DSP : pulse48kHz"] --> I2S_RX
     CLK --> DSP
     CLK --> I2S_TX
