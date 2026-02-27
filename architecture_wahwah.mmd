@@ -1,0 +1,32 @@
+flowchart LR
+    AIN[Entree audio analogique\nCodec ADAU1761] --> I2S_RX[i2s_ctl RX\nin_audioL/in_audioR]
+
+    I2S_RX --> FIRL[fir gauche]
+    I2S_RX --> FIRR[fir droit]
+
+    subgraph WAHL[fir gauche : wahwah_arch]
+      DINL[din 24 bits] --> Q16L[Extraction 16 MSB]
+      Q16L --> LFO1[LFO phase 32 bits]
+      LFO1 --> ROM1[wahwah_coeff_rom\n256 x (b0,-a1,-a2)]
+      Q16L --> BIQ1[wahwah_biquad DF1\nx_z1 x_z2 y_z1 y_z2]
+      ROM1 --> BIQ1
+      BIQ1 --> ON1{sw7 effet ON ?}
+      Q16L --> ON1
+      ON1 --> DOUTL[dout 24 bits]
+    end
+
+    subgraph WAHR[fir droit : wahwah_arch]
+      DINR[din 24 bits] --> Q16R[Extraction 16 MSB]
+      Q16R --> LFO2[LFO phase 32 bits]
+      LFO2 --> ROM2[wahwah_coeff_rom\n256 x (b0,-a1,-a2)]
+      Q16R --> BIQ2[wahwah_biquad DF1\nx_z1 x_z2 y_z1 y_z2]
+      ROM2 --> BIQ2
+      BIQ2 --> ON2{sw7 effet ON ?}
+      Q16R --> ON2
+      ON2 --> DOUTR[dout 24 bits]
+    end
+
+    DOUTL --> MIX[mixL/mixR\nBTNC bypass global]
+    DOUTR --> MIX
+    MIX --> I2S_TX[i2s_ctl TX\nout_audioL/out_audioR]
+    I2S_TX --> AOUT[Sortie audio analogique\nCodec ADAU1761]

@@ -1,0 +1,35 @@
+flowchart LR
+    ADC["Codec ADC"] --> I2S_RX["Interface I2S RX"]
+    I2S_RX --> AUDIO_IN["Flux audio stéréo"]
+
+    subgraph DSP["Chaîne DSP (par canal L/R)"]
+        AUDIO_IN --> PREP["Pré-traitement\n(alignement/format)"]
+        PREP --> SEL_FX{"Bypass effet ?"}
+
+        subgraph CTRL["Génération contrôle wah"]
+            LFO["LFO basse fréquence"]
+            MAP["Mapping expo\n0..1 -> fc"]
+            LFO --> MAP
+        end
+
+        subgraph COEFF["Calcul coefficients"]
+            COEF["Coefficients biquad\n(b0,b1,b2,a1,a2)"]
+        end
+
+        MAP --> COEF
+        PREP --> IIR["Filtre IIR résonant\n(Biquad passe-bande)"]
+        COEF --> IIR
+
+        IIR --> SEL_FX
+        SEL_FX --> POST["Post-traitement\n(gain/saturation)"]
+    end
+
+    POST --> MIX["Mix / routage"]
+    MIX --> I2S_TX["Interface I2S TX"]
+    I2S_TX --> DAC["Codec DAC"]
+
+    UI["Commandes utilisateur\n(sw/boutons)"] --> LFO
+    UI --> SEL_FX
+    CLK["Horloges\n(100MHz, Fs)"] --> I2S_RX
+    CLK --> DSP
+    CLK --> I2S_TX
