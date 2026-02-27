@@ -46,6 +46,11 @@ if {[string equal [get_filesets -quiet constrs_1] ""]} {
   create_fileset -constrset constrs_1
 }
 
+# Create 'sim_1' fileset (if not found)
+if {[string equal [get_filesets -quiet sim_1] ""]} {
+  create_fileset -simset sim_1
+}
+
 # Set IP repository paths
 set obj [get_filesets sources_1]
 set_property "ip_repo_paths" "[file normalize $repo_dir]" $obj
@@ -58,6 +63,12 @@ if {[llength $hdl_vhd] > 0} {
 }
 if {[llength $hdl_v] > 0} {
   add_files -quiet $hdl_v
+}
+
+# Add simulation testbenches explicitly to sim_1
+set tb_vhd [glob -nocomplain $src_dir/hdl/tb_*.vhd]
+if {[llength $tb_vhd] > 0} {
+  add_files -quiet -fileset sim_1 $tb_vhd
 }
 
 # Add IPs
@@ -101,6 +112,14 @@ set_property "steps.write_bitstream.args.bin_file" "1" $obj
 
 # set the current impl run
 current_run -implementation [get_runs impl_1]
+
+# Set synthesis top and simulation top
+set src_fs [get_filesets sources_1]
+set sim_fs [get_filesets sim_1]
+set_property top audioProc $src_fs
+if {[llength [get_files -quiet -of_objects $sim_fs */tb_wahwahUnit.vhd]] > 0} {
+  set_property top tb_wahwahUnit $sim_fs
+}
 
 #puts "INFO: Project created:$proj_name"
 
