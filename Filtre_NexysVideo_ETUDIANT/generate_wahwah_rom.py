@@ -20,9 +20,9 @@ import pathlib
 
 # ── Paramètres DSP ──────────────────────────────────────────────────────────
 FS        = 48000.0   # Fréquence d'échantillonnage I2S (Nexys Video)
-Q         = 0.8       # Facteur de qualité du passe-bande (très large)
-FMIN      = 400.0     # Fréquence basse du sweep (Hz)
-FMAX      = 2200.0    # Fréquence haute du sweep (Hz)
+Q         = 1.4       # Facteur de qualité du passe-bande (wah plus marqué)
+FMIN      = 350.0     # Fréquence basse du sweep (Hz)
+FMAX      = 2800.0    # Fréquence haute du sweep (Hz)
 N_LUT     = 256       # Nombre d'entrées dans la ROM (8-bit d'adresse)
 FRAC_BITS = 14        # Bits fractionnaires du format Q1.14
 

@@ -11,7 +11,7 @@
 -- correspond à un jeu de coefficients (b0, -a1, -a2) en Q1.14.
 --
 -- La vitesse du LFO est sélectionnable via I_lfo_speed_sel (3 bits,
--- 8 vitesses de 0.5 Hz à 5.0 Hz).
+-- 8 vitesses de 1.0 Hz à 10.0 Hz).
 -------------------------------------------------------------------------------
 
 library ieee;
@@ -41,14 +41,14 @@ architecture arch_wahwahUnit of wahwahUnit is
   -- ════════════════════════════════════════════════════════════
   type lfo_incr_rom_t is array(0 to 7) of unsigned(31 downto 0);
   constant LFO_INCR_ROM : lfo_incr_rom_t := (
-    to_unsigned(  44739, 32),   -- 0 : 0.5 Hz
-    to_unsigned(  89478, 32),   -- 1 : 1.0 Hz
-    to_unsigned( 134218, 32),   -- 2 : 1.5 Hz  (défaut du cahier des charges)
-    to_unsigned( 178957, 32),   -- 3 : 2.0 Hz
-    to_unsigned( 223696, 32),   -- 4 : 2.5 Hz
-    to_unsigned( 268435, 32),   -- 5 : 3.0 Hz
-    to_unsigned( 357914, 32),   -- 6 : 4.0 Hz
-    to_unsigned( 447392, 32)    -- 7 : 5.0 Hz
+    to_unsigned(  89478, 32),   -- 0 : 1.0 Hz
+    to_unsigned( 178957, 32),   -- 1 : 2.0 Hz
+    to_unsigned( 268435, 32),   -- 2 : 3.0 Hz
+    to_unsigned( 357914, 32),   -- 3 : 4.0 Hz
+    to_unsigned( 447392, 32),   -- 4 : 5.0 Hz
+    to_unsigned( 581610, 32),   -- 5 : 6.5 Hz
+    to_unsigned( 715828, 32),   -- 6 : 8.0 Hz
+    to_unsigned( 894785, 32)    -- 7 : 10.0 Hz
   );
 
   -- ════════════════════════════════════════════════════════════
