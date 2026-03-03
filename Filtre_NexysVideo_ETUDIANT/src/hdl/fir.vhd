@@ -36,8 +36,9 @@ end fir;
 architecture wahwah_arch of fir is
 
   -- Signaux audio 16 bits internes
-  signal D_in  : std_logic_vector(15 downto 0);
-  signal D_out : std_logic_vector(15 downto 0);
+  signal D_in        : std_logic_vector(15 downto 0);
+  signal D_out       : std_logic_vector(15 downto 0);
+  signal D_out_makeup: std_logic_vector(15 downto 0);
 
 begin
 
@@ -56,8 +57,26 @@ begin
       O_filteredSampleValid => open
     );
 
+  -- Compensation de niveau après le passe-bande wah-wah : gain fixe ~+3.5 dB (x1.5)
+  -- avec saturation 16 bits pour éviter l'écrêtage numérique violent.
+  process(D_out)
+    variable v_in  : signed(15 downto 0);
+    variable v_amp : signed(17 downto 0);
+  begin
+    v_in  := signed(D_out);
+    v_amp := resize(v_in, 18) + shift_right(resize(v_in, 18), 1);  -- x1.5
+
+    if v_amp > to_signed(32767, 18) then
+      D_out_makeup <= std_logic_vector(to_signed(32767, 16));
+    elsif v_amp < to_signed(-32768, 18) then
+      D_out_makeup <= std_logic_vector(to_signed(-32768, 16));
+    else
+      D_out_makeup <= std_logic_vector(v_amp(15 downto 0));
+    end if;
+  end process;
+
   -- Sortie : bypass ou signal filtré (config_sw(4) active l'effet)
-  dout(dwidth-1 downto dwidth-16) <= D_out when config_sw(4) = '1' else D_in;
+  dout(dwidth-1 downto dwidth-16) <= D_out_makeup when config_sw(4) = '1' else D_in;
   dout(dwidth-17 downto 0)        <= (others => '0');
 
   -- Sorties de debug inutilisées en mode wah-wah
