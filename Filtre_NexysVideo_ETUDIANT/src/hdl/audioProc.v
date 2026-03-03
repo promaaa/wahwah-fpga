@@ -178,21 +178,15 @@ module audioProc(
    /////////////////////////////
    wire [23:0] inputLeftSample, inputRightSample,outputLeftSample,outputRightSample;
    wire [4:0] configSw;
-   wire effect_soft;
-   wire effect_mid;
-   wire effect_strong;
    wire effect_on;
-   wire signed [24:0] mixL_soft;
-   wire signed [24:0] mixR_soft;
-   wire signed [24:0] mixL_mid;
-   wire signed [24:0] mixR_mid;
+   wire effect_freq_up;
+   wire effect_freq_down;
 
    assign inputLeftSample = in_audioL;
    assign inputRightSample = in_audioR;
-   assign effect_soft = buttons_db[1];
-   assign effect_mid = buttons_db[2];
-   assign effect_strong = buttons_db[4];
-   assign effect_on = effect_soft | effect_mid | effect_strong;
+   assign effect_on = buttons_db[2];
+   assign effect_freq_up = buttons_db[4];
+   assign effect_freq_down = buttons_db[1];
    assign configSw[0]=sw3;
    assign configSw[1]=sw4;
    assign configSw[2]=sw5;
@@ -206,36 +200,39 @@ module audioProc(
 
    fir #(24,16) leftFir 
      (
-      inputLeftSample,
-      outputLeftSample,
-      configSw,//config_sw, //   : in  std_logic_vector(3 downto 0);  --inutilise dans le TP majeure
-      clk_out_100MHZ, //         : in  std_logic;
-      rst,//         : in  std_logic;
-      pulse48kHz//           : in  std_logic;  -- signal de validation de din a la frequence des echantillons audio
+      .din(inputLeftSample),
+      .dout(outputLeftSample),
+      .config_sw(configSw),
+      .clk(clk_out_100MHZ),
+      .rst(rst),
+      .ce(pulse48kHz),
+      .freq_up(effect_freq_up),
+      .freq_down(effect_freq_down),
+      .dbg_output_0(),
+      .dbg_output_1(),
+      .dbg_output_2(),
+      .dbg_output_3(),
+      .dbg_output_4()
       );
    fir #(24,16) rightFir 
      (
-      inputRightSample,
-      outputRightSample,
-      configSw,//config_sw, //   : in  std_logic_vector(3 downto 0);  --inutilise dans le TP majeure
-      clk_out_100MHZ, //         : in  std_logic;
-      rst,//         : in  std_logic;
-      pulse48kHz//           : in  std_logic;  -- signal de validation de din a la frequence des echantillons audio
+      .din(inputRightSample),
+      .dout(outputRightSample),
+      .config_sw(configSw),
+      .clk(clk_out_100MHZ),
+      .rst(rst),
+      .ce(pulse48kHz),
+      .freq_up(effect_freq_up),
+      .freq_down(effect_freq_down),
+      .dbg_output_0(),
+      .dbg_output_1(),
+      .dbg_output_2(),
+      .dbg_output_3(),
+      .dbg_output_4()
       );
    
-   assign mixL_soft = (($signed(in_audioL) <<< 1) + $signed(in_audioL) + $signed(outputLeftSample)) >>> 2;
-   assign mixR_soft = (($signed(in_audioR) <<< 1) + $signed(in_audioR) + $signed(outputRightSample)) >>> 2;
-   assign mixL_mid = ($signed(in_audioL) + $signed(outputLeftSample)) >>> 1;
-   assign mixR_mid = ($signed(in_audioR) + $signed(outputRightSample)) >>> 1;
-
-   assign mixL = effect_strong ? outputLeftSample :
-                 effect_mid    ? mixL_mid[23:0] :
-                 effect_soft   ? mixL_soft[23:0] :
-                                 in_audioL;
-   assign mixR = effect_strong ? outputRightSample :
-                 effect_mid    ? mixR_mid[23:0] :
-                 effect_soft   ? mixR_soft[23:0] :
-                                 in_audioR;
+   assign mixL = outputLeftSample;
+   assign mixR = outputRightSample;
 
 
    ////////////////////////////////////////////////////////////////////////////////////////////////////////

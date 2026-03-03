@@ -15,6 +15,8 @@ entity fir is
     clk          : in  std_logic;
     rst          : in  std_logic;
     ce           : in  std_logic;  -- signal de validation de din a la frequence des echantillons audio
+    freq_up      : in  std_logic := '0';
+    freq_down    : in  std_logic := '0';
     dbg_output_0 : out std_logic_vector(7 downto 0);  --inutilise dans le TP majeure
     dbg_output_1 : out std_logic_vector(7 downto 0);  --inutilise dans le TP majeure
     dbg_output_2 : out std_logic;       --inutilise dans le TP majeure
@@ -53,6 +55,8 @@ begin
       I_inputSample         => D_in,
       I_inputSampleValid    => ce,
       I_lfo_speed_sel       => config_sw(2 downto 0),
+      I_freq_up             => freq_up,
+      I_freq_down           => freq_down,
       O_filteredSample      => D_out,
       O_filteredSampleValid => open
     );
