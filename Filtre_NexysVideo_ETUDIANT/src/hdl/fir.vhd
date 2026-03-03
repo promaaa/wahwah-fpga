@@ -57,14 +57,14 @@ begin
       O_filteredSampleValid => open
     );
 
-  -- Compensation de niveau après le passe-bande wah-wah : gain fixe ~+3.5 dB (x1.5)
+  -- Compensation de niveau après le passe-bande wah-wah : gain fixe +6 dB (x2)
   -- avec saturation 16 bits pour éviter l'écrêtage numérique violent.
   process(D_out)
     variable v_in  : signed(15 downto 0);
     variable v_amp : signed(17 downto 0);
   begin
     v_in  := signed(D_out);
-    v_amp := resize(v_in, 18) + shift_right(resize(v_in, 18), 1);  -- x1.5
+    v_amp := shift_left(resize(v_in, 18), 1);  -- x2
 
     if v_amp > to_signed(32767, 18) then
       D_out_makeup <= std_logic_vector(to_signed(32767, 16));
