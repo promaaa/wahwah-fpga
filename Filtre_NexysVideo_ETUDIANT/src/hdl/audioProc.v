@@ -179,22 +179,24 @@ module audioProc(
    wire [23:0] inputLeftSample, inputRightSample,outputLeftSample,outputRightSample;
    wire [4:0] configSw;
    wire effect_on;
-   wire effect_freq_up;
-   wire effect_freq_down;
+   wire speed_slow;
+   wire speed_mid;
+   wire speed_fast;
 
    assign inputLeftSample = in_audioL;
    assign inputRightSample = in_audioR;
-   assign effect_on = buttons_db[2];
-   assign effect_freq_up = buttons_db[4];
-   assign effect_freq_down = buttons_db[1];
-   assign configSw[0]=sw3;
-   assign configSw[1]=sw4;
-   assign configSw[2]=sw5;
+   assign speed_slow = buttons_db[1];
+   assign speed_mid = buttons_db[2];
+   assign speed_fast = buttons_db[4];
+   assign effect_on = speed_slow | speed_mid | speed_fast;
+   assign {configSw[2], configSw[1], configSw[0]} = speed_fast ? 3'b110 :
+                                                    speed_mid  ? 3'b011 :
+                                                                 3'b000;
    assign configSw[3]=sw6;
    assign configSw[4]=effect_on;
-   assign led3=sw3;
-   assign led4=sw4;
-   assign led5=sw5;
+   assign led3=speed_slow;
+   assign led4=speed_mid;
+   assign led5=speed_fast;
    assign led6=sw6;
    assign led7=effect_on;
 
@@ -206,8 +208,6 @@ module audioProc(
       .clk(clk_out_100MHZ),
       .rst(rst),
       .ce(pulse48kHz),
-      .freq_up(effect_freq_up),
-      .freq_down(effect_freq_down),
       .dbg_output_0(),
       .dbg_output_1(),
       .dbg_output_2(),
@@ -222,8 +222,6 @@ module audioProc(
       .clk(clk_out_100MHZ),
       .rst(rst),
       .ce(pulse48kHz),
-      .freq_up(effect_freq_up),
-      .freq_down(effect_freq_down),
       .dbg_output_0(),
       .dbg_output_1(),
       .dbg_output_2(),

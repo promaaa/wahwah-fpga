@@ -26,8 +26,6 @@ entity wahwahUnit is
     I_inputSampleValid    : in  std_logic;
     -- Sélection vitesse LFO (3 bits → 8 vitesses possibles)
     I_lfo_speed_sel       : in  std_logic_vector(2 downto 0);
-    I_freq_up             : in  std_logic := '0';
-    I_freq_down           : in  std_logic := '0';
     O_filteredSample      : out std_logic_vector(15 downto 0);
     O_filteredSampleValid : out std_logic
   );
@@ -58,12 +56,9 @@ architecture arch_wahwahUnit of wahwahUnit is
   -- ════════════════════════════════════════════════════════════
 
   -- LFO : accumulateur de phase
-  signal SR_lfo_phase     : unsigned(31 downto 0) := (others => '0');
-  signal SR_center_offset : unsigned(7 downto 0)  := (others => '0');
-  signal SR_freq_step_cnt : unsigned(9 downto 0)  := (others => '0');
-  signal SC_lfo_addr_base : unsigned(7 downto 0);
-  signal SC_lfo_addr      : std_logic_vector(7 downto 0);
-  signal SC_lfo_incr      : unsigned(31 downto 0);
+  signal SR_lfo_phase : unsigned(31 downto 0) := (others => '0');
+  signal SC_lfo_addr  : std_logic_vector(7 downto 0);
+  signal SC_lfo_incr  : unsigned(31 downto 0);
 
   -- Coefficients issus de la ROM (BLOC 1)
   signal SC_b0     : signed(15 downto 0);
@@ -84,34 +79,16 @@ begin
   process (I_clock, I_reset)
   begin
     if I_reset = '1' then
-      SR_lfo_phase     <= (others => '0');
-      SR_center_offset <= (others => '0');
-      SR_freq_step_cnt <= (others => '0');
+      SR_lfo_phase <= (others => '0');
     elsif rising_edge(I_clock) then
       if I_inputSampleValid = '1' then
         SR_lfo_phase <= SR_lfo_phase + SC_lfo_incr;
-
-        if I_freq_up /= I_freq_down then
-          if SR_freq_step_cnt = to_unsigned(1023, SR_freq_step_cnt'length) then
-            SR_freq_step_cnt <= (others => '0');
-            if I_freq_up = '1' then
-              SR_center_offset <= SR_center_offset + 1;
-            else
-              SR_center_offset <= SR_center_offset - 1;
-            end if;
-          else
-            SR_freq_step_cnt <= SR_freq_step_cnt + 1;
-          end if;
-        else
-          SR_freq_step_cnt <= (others => '0');
-        end if;
       end if;
     end if;
   end process;
 
   -- Les 8 bits de poids fort du phase accumulator → adresse ROM
-  SC_lfo_addr_base <= SR_lfo_phase(31 downto 24);
-  SC_lfo_addr <= std_logic_vector(SC_lfo_addr_base + SR_center_offset);
+  SC_lfo_addr <= std_logic_vector(SR_lfo_phase(31 downto 24));
 
   -- ════════════════════════════════════════════════════════════
   -- BLOC MATERIEL 1 : Calcul des coefficients (ROM combinatoire)
