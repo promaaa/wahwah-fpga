@@ -185,12 +185,12 @@ module audioProc(
    assign configSw[1]=sw4;
    assign configSw[2]=sw5;
    assign configSw[3]=sw6;
-   assign configSw[4]=sw7;
+   assign configSw[4]=buttons_db[2];
    assign led3=sw3;
    assign led4=sw4;
    assign led5=sw5;
    assign led6=sw6;
-   assign led7=sw7;
+   assign led7=buttons_db[2];
 
    fir #(24,16) leftFir 
      (
@@ -211,8 +211,8 @@ module audioProc(
       pulse48kHz//           : in  std_logic;  -- signal de validation de din a la frequence des echantillons audio
       );
    
-   assign mixL = buttons_db[2] ? in_audioL : outputLeftSample;
-   assign mixR = buttons_db[2] ? in_audioR : outputRightSample;
+   assign mixL = outputLeftSample;
+   assign mixR = outputRightSample;
 
 
    ////////////////////////////////////////////////////////////////////////////////////////////////////////
