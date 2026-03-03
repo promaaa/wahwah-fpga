@@ -44,6 +44,8 @@ architecture archi_firUnit of firUnit is
       I_inputSample         : in  std_logic_vector(15 downto 0);
       I_inputSampleValid    : in  std_logic;
       I_lfo_speed_sel       : in  std_logic_vector(2 downto 0);
+      I_manual_mode         : in  std_logic;
+      I_manual_addr         : in  std_logic_vector(7 downto 0);
       O_filteredSample      : out std_logic_vector(15 downto 0);
       O_filteredSampleValid : out std_logic
     );
@@ -64,6 +66,8 @@ begin
       I_inputSample         => SC_in_16,
       I_inputSampleValid    => I_inputSampleValid,
       I_lfo_speed_sel       => "010", -- 1.5 Hz par défaut
+      I_manual_mode         => '0',
+      I_manual_addr         => (others => '0'),
       O_filteredSample      => SC_out_16,
       O_filteredSampleValid => O_filteredSampleValid
     );

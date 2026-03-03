@@ -12,6 +12,7 @@ entity fir is
     din          : in  std_logic_vector(dwidth-1 downto 0);
     dout         : out std_logic_vector(dwidth-1 downto 0);
     config_sw    : in  std_logic_vector(4 downto 0);  --inutilise dans le TP majeure
+    pot_pos      : in  std_logic_vector(7 downto 0);  -- position potentiomètre (XADC)
     clk          : in  std_logic;
     rst          : in  std_logic;
     ce           : in  std_logic;  -- signal de validation de din a la frequence des echantillons audio
@@ -31,6 +32,7 @@ end fir;
 -- Chemin de données interne : 16 bits signés (meilleur SNR pour l'IIR)
 -- config_sw(4)     : bypass (0 = dry, 1 = wah-wah)
 -- config_sw(2..0)  : vitesse du LFO (0.5 – 5.0 Hz)
+-- config_sw(3)     : mode manuel (1 = pédale/pot, 0 = LFO auto)
 -- ═══════════════════════════════════════════════════════════════════
 
 architecture wahwah_arch of fir is
@@ -53,6 +55,8 @@ begin
       I_inputSample         => D_in,
       I_inputSampleValid    => ce,
       I_lfo_speed_sel       => config_sw(2 downto 0),
+      I_manual_mode         => config_sw(3),
+      I_manual_addr         => pot_pos,
       O_filteredSample      => D_out,
       O_filteredSampleValid => open
     );

@@ -26,6 +26,9 @@ entity wahwahUnit is
     I_inputSampleValid    : in  std_logic;
     -- Sélection vitesse LFO (3 bits → 8 vitesses possibles)
     I_lfo_speed_sel       : in  std_logic_vector(2 downto 0);
+    -- Mode manuel type pédale : adresse ROM imposée par potentiomètre
+    I_manual_mode         : in  std_logic;
+    I_manual_addr         : in  std_logic_vector(7 downto 0);
     O_filteredSample      : out std_logic_vector(15 downto 0);
     O_filteredSampleValid : out std_logic
   );
@@ -59,6 +62,7 @@ architecture arch_wahwahUnit of wahwahUnit is
   signal SR_lfo_phase : unsigned(31 downto 0) := (others => '0');
   signal SC_lfo_addr  : std_logic_vector(7 downto 0);
   signal SC_lfo_incr  : unsigned(31 downto 0);
+  signal SC_coeff_addr: std_logic_vector(7 downto 0);
 
   -- Coefficients issus de la ROM (BLOC 1)
   signal SC_b0     : signed(15 downto 0);
@@ -89,13 +93,15 @@ begin
 
   -- Les 8 bits de poids fort du phase accumulator → adresse ROM
   SC_lfo_addr <= std_logic_vector(SR_lfo_phase(31 downto 24));
+  -- En mode manuel, l'adresse ROM est pilotée par le potentiomètre
+  SC_coeff_addr <= I_manual_addr when I_manual_mode = '1' else SC_lfo_addr;
 
   -- ════════════════════════════════════════════════════════════
   -- BLOC MATERIEL 1 : Calcul des coefficients (ROM combinatoire)
   -- ════════════════════════════════════════════════════════════
   coeff_rom_inst : entity work.wahwah_coeff_rom
     port map (
-      I_address => SC_lfo_addr,
+      I_address => SC_coeff_addr,
       O_b0      => SC_b0,
       O_neg_a1  => SC_neg_a1,
       O_neg_a2  => SC_neg_a2
