@@ -2,7 +2,7 @@ flowchart LR
     I2S_RX["Interface I2S RX - D_L_O / D_R_O : 24 bits"] --> AUDIO_IN["Flux audio stéréo - Fs = 48 kHz"]
 
     subgraph DSP["Chaîne DSP LUT-optimisée (dupliquée L/R)"]
-        AUDIO_IN --> PREP["Pré-traitement - 24 -> 16 bits signés (MSB extraction)"]
+        AUDIO_IN --> PREP["Pré-traitement - Chemin direct 24 bits signés"]
 
         subgraph CTRL["Contrôle de l'index LUT"]
             UI["UI (switches) - config_sw[2:0] : vitesse LFO - config_sw[4] : bypass effet"] --> LFO
@@ -10,16 +10,16 @@ flowchart LR
         end
 
         subgraph MEM["Mémoire coefficients"]
-            LUT[("ROM coeffs - Profondeur : 256 - Largeur : 3 x 16 bits - Format : Q1.14 - Sorties : b0, -a1, -a2")]
+            LUT[("ROM coeffs - Profondeur : 256 - Largeur : 3 x 24 bits - Format : Q1.22 - Sorties : b0, -a1, -a2")]
         end
 
         SCALE -->|"index[7:0]"| LUT
         LUT -->|"b0, -a1, -a2"| IIR
 
-        PREP --> IIR["Filtre IIR biquad DF1 - Ordre 2 - Entrée/sortie : 16 bits - MAC : 4 cycles/échantillon - Accu : 36 bits - Shift : >>14 + saturation"]
+        PREP --> IIR["Filtre IIR biquad DF1 - Ordre 2 - Entrée/sortie : 24 bits - MAC : 4 cycles/échantillon - Accu : 56 bits - Shift : >>22 + saturation"]
         IIR --> SEL_FX{"Bypass ? - config_sw[4]"}
         PREP --> SEL_FX
-        SEL_FX --> POST["Post-traitement - Alignement vers 24 bits"]
+        SEL_FX --> POST["Post-traitement - Gain makeup x2 + saturation 24 bits"]
     end
 
     POST --> MIX["Mix / routage global - Bouton : dry/wet global"]

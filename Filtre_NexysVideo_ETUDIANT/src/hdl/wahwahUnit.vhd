@@ -8,7 +8,7 @@
 -- Le LFO est un accumulateur de phase 32 bits dont les 8 bits de poids
 -- fort indexent la ROM de 256 entrées.  La ROM encode directement la
 -- trajectoire sinusoïdale avec balayage exponentiel : chaque adresse
--- correspond à un jeu de coefficients (b0, -a1, -a2) en Q1.14.
+-- correspond à un jeu de coefficients (b0, -a1, -a2) en Q1.22.
 --
 -- La vitesse du LFO est sélectionnable via I_lfo_speed_sel (3 bits,
 -- 8 vitesses de 1.0 Hz à 10.0 Hz).
@@ -22,14 +22,14 @@ entity wahwahUnit is
   port (
     I_clock               : in  std_logic;
     I_reset               : in  std_logic;
-    I_inputSample         : in  std_logic_vector(15 downto 0);
+    I_inputSample         : in  std_logic_vector(23 downto 0);
     I_inputSampleValid    : in  std_logic;
     -- Sélection vitesse LFO (3 bits → 8 vitesses possibles)
     I_lfo_speed_sel       : in  std_logic_vector(2 downto 0);
     -- Mode manuel type pédale : adresse ROM imposée par potentiomètre
     I_manual_mode         : in  std_logic;
     I_manual_addr         : in  std_logic_vector(7 downto 0);
-    O_filteredSample      : out std_logic_vector(15 downto 0);
+    O_filteredSample      : out std_logic_vector(23 downto 0);
     O_filteredSampleValid : out std_logic
   );
 end entity wahwahUnit;
@@ -65,9 +65,9 @@ architecture arch_wahwahUnit of wahwahUnit is
   signal SC_coeff_addr: std_logic_vector(7 downto 0);
 
   -- Coefficients issus de la ROM (BLOC 1)
-  signal SC_b0     : signed(15 downto 0);
-  signal SC_neg_a1 : signed(15 downto 0);
-  signal SC_neg_a2 : signed(15 downto 0);
+  signal SC_b0     : signed(23 downto 0);
+  signal SC_neg_a1 : signed(23 downto 0);
+  signal SC_neg_a2 : signed(23 downto 0);
 
 begin
 
@@ -112,7 +112,7 @@ begin
   -- ════════════════════════════════════════════════════════════
   biquad_inst : entity work.wahwah_biquad
     generic map (
-      FRAC_BITS => 14
+      FRAC_BITS => 22
     )
     port map (
       I_clock               => I_clock,

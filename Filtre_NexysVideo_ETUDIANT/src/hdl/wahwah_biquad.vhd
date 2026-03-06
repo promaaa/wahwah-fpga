@@ -11,11 +11,11 @@
 -- (b0*x[n], b0*x[n-2], neg_a1*y[n-1], neg_a2*y[n-2] → 4 MAC cycles).
 --
 -- Arithmétique virgule fixe :
---   Audio  : 16 bits signés (entier)
---   Coeffs : 16 bits signés Q1.14
---   Produit: 32 bits signés
---   Accum. : 36 bits signés (marge de 4 bits)
---   Sortie : acc >> 14, saturé à 16 bits
+--   Audio  : 24 bits signés (entier)
+--   Coeffs : 24 bits signés Q1.22
+--   Produit: 48 bits signés
+--   Accum. : 56 bits signés (marge de 8 bits)
+--   Sortie : acc >> 22, saturé à 24 bits
 --
 -- FSM : IDLE → LOAD → MAC0 → MAC1 → MAC2 → MAC3 → STORE → DONE
 -------------------------------------------------------------------------------
@@ -26,20 +26,20 @@ use ieee.numeric_std.all;
 
 entity wahwah_biquad is
   generic (
-    FRAC_BITS : natural := 14  -- nombre de bits fractionnaires (Q1.14)
+    FRAC_BITS : natural := 22  -- nombre de bits fractionnaires (Q1.22)
   );
   port (
     I_clock               : in  std_logic;
     I_reset               : in  std_logic;
-    -- Échantillon d'entrée (16 bits signés)
-    I_inputSample         : in  std_logic_vector(15 downto 0);
+    -- Échantillon d'entrée (24 bits signés)
+    I_inputSample         : in  std_logic_vector(23 downto 0);
     I_inputSampleValid    : in  std_logic;
-    -- Coefficients biquad en Q1.14 (fournis par le bloc de calcul des coefficients)
-    I_b0                  : in  signed(15 downto 0);    -- b0
-    I_neg_a1              : in  signed(15 downto 0);    -- -a1
-    I_neg_a2              : in  signed(15 downto 0);    -- -a2
+    -- Coefficients biquad en Q1.22 (fournis par le bloc de calcul des coefficients)
+    I_b0                  : in  signed(23 downto 0);    -- b0
+    I_neg_a1              : in  signed(23 downto 0);    -- -a1
+    I_neg_a2              : in  signed(23 downto 0);    -- -a2
     -- Échantillon filtré
-    O_filteredSample      : out std_logic_vector(15 downto 0);
+    O_filteredSample      : out std_logic_vector(23 downto 0);
     O_filteredSampleValid : out std_logic
   );
 end entity wahwah_biquad;
@@ -64,24 +64,24 @@ architecture arch_wahwah_biquad of wahwah_biquad is
   -- ════════════════════════════════════════════════════════════
   -- Registres à retard (mémoires d'état DF1)
   -- ════════════════════════════════════════════════════════════
-  signal SR_x_z1 : signed(15 downto 0);  -- x[n-1] (conservé pour généralité)
-  signal SR_x_z2 : signed(15 downto 0);  -- x[n-2]
-  signal SR_y_z1 : signed(15 downto 0);  -- y[n-1]
-  signal SR_y_z2 : signed(15 downto 0);  -- y[n-2]
+  signal SR_x_z1 : signed(23 downto 0);  -- x[n-1] (conservé pour généralité)
+  signal SR_x_z2 : signed(23 downto 0);  -- x[n-2]
+  signal SR_y_z1 : signed(23 downto 0);  -- y[n-1]
+  signal SR_y_z2 : signed(23 downto 0);  -- y[n-2]
 
   -- Échantillon courant capturé
-  signal SR_x_n : signed(15 downto 0);
+  signal SR_x_n : signed(23 downto 0);
 
   -- ════════════════════════════════════════════════════════════
   -- Chemin de données MAC (Multiply-Accumulate)
   -- ════════════════════════════════════════════════════════════
-  signal SR_mult_a    : signed(15 downto 0);  -- opérande A du multiplieur
-  signal SR_mult_b    : signed(15 downto 0);  -- opérande B du multiplieur
-  signal SC_mult_out  : signed(31 downto 0);  -- produit combinatoire (DSP48)
-  signal SR_acc       : signed(35 downto 0);  -- accumulateur 36 bits
+  signal SR_mult_a    : signed(23 downto 0);  -- opérande A du multiplieur
+  signal SR_mult_b    : signed(23 downto 0);  -- opérande B du multiplieur
+  signal SC_mult_out  : signed(47 downto 0);  -- produit combinatoire (DSP48)
+  signal SR_acc       : signed(55 downto 0);  -- accumulateur 56 bits
 
   -- Résultat filtré
-  signal SR_y_out     : signed(15 downto 0);
+  signal SR_y_out     : signed(23 downto 0);
   signal SR_y_valid   : std_logic;
 
 begin
@@ -95,7 +95,7 @@ begin
   -- Machine à états + chemin de données séquentiel
   -- ────────────────────────────────────────────────────────────
   process (I_clock, I_reset)
-    variable V_acc_shifted : signed(35 downto 0);
+    variable V_acc_shifted : signed(55 downto 0);
   begin
     if I_reset = '1' then
       SR_state   <= S_IDLE;
@@ -132,7 +132,7 @@ begin
 
         -- ░░ MAC0 ░░ acc = b0 × x[n] ░░
         when S_MAC0 =>
-          SR_acc    <= resize(SC_mult_out, 36);
+          SR_acc    <= resize(SC_mult_out, 56);
           -- Préparer : b0 × x[n-2]  (sera soustrait → b2 = -b0)
           SR_mult_a <= I_b0;
           SR_mult_b <= SR_x_z2;
@@ -140,7 +140,7 @@ begin
 
         -- ░░ MAC1 ░░ acc -= b0 × x[n-2] ░░
         when S_MAC1 =>
-          SR_acc    <= SR_acc - resize(SC_mult_out, 36);
+          SR_acc    <= SR_acc - resize(SC_mult_out, 56);
           -- Préparer : (-a1) × y[n-1]
           SR_mult_a <= I_neg_a1;
           SR_mult_b <= SR_y_z1;
@@ -148,7 +148,7 @@ begin
 
         -- ░░ MAC2 ░░ acc += (-a1) × y[n-1] ░░
         when S_MAC2 =>
-          SR_acc    <= SR_acc + resize(SC_mult_out, 36);
+          SR_acc    <= SR_acc + resize(SC_mult_out, 56);
           -- Préparer : (-a2) × y[n-2]
           SR_mult_a <= I_neg_a2;
           SR_mult_b <= SR_y_z2;
@@ -156,21 +156,21 @@ begin
 
         -- ░░ MAC3 ░░ acc += (-a2) × y[n-2] ░░
         when S_MAC3 =>
-          SR_acc   <= SR_acc + resize(SC_mult_out, 36);
+          SR_acc   <= SR_acc + resize(SC_mult_out, 56);
           SR_state <= S_STORE;
 
         -- ░░ STORE ░░ Extraction du résultat + mise à jour des registres ░░
         when S_STORE =>
-          -- Décalage à droite de FRAC_BITS (division par 2^14)
+          -- Décalage à droite de FRAC_BITS (division par 2^22)
           V_acc_shifted := shift_right(SR_acc, FRAC_BITS);
 
-          -- Saturation à 16 bits signés
-          if V_acc_shifted > to_signed(32767, 36) then
-            SR_y_out <= to_signed(32767, 16);
-          elsif V_acc_shifted < to_signed(-32768, 36) then
-            SR_y_out <= to_signed(-32768, 16);
+          -- Saturation à 24 bits signés
+          if V_acc_shifted > to_signed(8388607, 56) then
+            SR_y_out <= to_signed(8388607, 24);
+          elsif V_acc_shifted < to_signed(-8388608, 56) then
+            SR_y_out <= to_signed(-8388608, 24);
           else
-            SR_y_out <= V_acc_shifted(15 downto 0);
+            SR_y_out <= V_acc_shifted(23 downto 0);
           end if;
 
           -- Mise à jour des registres à retard de l'entrée

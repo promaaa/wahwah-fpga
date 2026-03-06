@@ -223,7 +223,7 @@ def process_wah_sample_by_sample(
 
 
 # ============================================================================
-# Bloc 5 : Protection clipping + export WAV 16-bit
+# Bloc 5 : Protection clipping + export WAV 24-bit
 # ============================================================================
 
 def protect_from_clipping(y: np.ndarray, mode: str = "normalize") -> np.ndarray:
@@ -243,10 +243,10 @@ def protect_from_clipping(y: np.ndarray, mode: str = "normalize") -> np.ndarray:
     return y
 
 
-def float_to_int16(y: np.ndarray) -> np.ndarray:
-    """Convertit [-1,1] float vers int16 (mono ou stéréo)."""
+def float_to_int24(y: np.ndarray) -> np.ndarray:
+    """Convertit [-1,1] float vers PCM 24 bits (stocké en int32)."""
     y = np.clip(y, -1.0, 1.0)
-    return (y * 32767.0).astype(np.int16)
+    return np.round(y * 8388607.0).astype(np.int32)
 
 
 # ============================================================================
@@ -289,9 +289,9 @@ def main() -> None:
     y = stereo_out[:, 0] if input_channels == 1 else stereo_out
 
     y_safe = protect_from_clipping(y, mode=args.clip_mode)
-    y_i16 = float_to_int16(y_safe)
+    y_i24 = float_to_int24(y_safe)
 
-    wavfile.write(args.output, fs, y_i16)
+    wavfile.write(args.output, fs, y_i24)
 
     print("Traitement terminé.")
     print(f"Entrée : {args.input}")

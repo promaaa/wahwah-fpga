@@ -14,15 +14,15 @@ architecture sim of tb_wahwahUnit is
 
   signal S_clk                : std_logic := '0';
   signal S_rst                : std_logic := '1';
-  signal S_input              : std_logic_vector(15 downto 0) := (others => '0');
+  signal S_input              : std_logic_vector(23 downto 0) := (others => '0');
   signal S_input_valid        : std_logic := '0';
   signal S_lfo_speed_sel      : std_logic_vector(2 downto 0) := "010";
   signal S_manual_mode        : std_logic := '0';
   signal S_manual_addr        : std_logic_vector(7 downto 0) := (others => '0');
-  signal S_output             : std_logic_vector(15 downto 0);
+  signal S_output             : std_logic_vector(23 downto 0);
   signal S_output_valid       : std_logic;
 begin
-<
+
   uut : entity work.wahwahUnit
     port map (
       I_clock               => S_clk,
@@ -69,7 +69,7 @@ begin
           v_step := 900;
         end if;
         v_sample := v_sample + v_step;
-        S_input <= std_logic_vector(to_signed(v_sample, 16));
+        S_input <= std_logic_vector(to_signed(v_sample, 24));
 
         if v_sample_cnt = 500 then
           S_lfo_speed_sel <= "001";

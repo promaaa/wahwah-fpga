@@ -41,38 +41,38 @@ architecture archi_firUnit of firUnit is
     port (
       I_clock               : in  std_logic;
       I_reset               : in  std_logic;
-      I_inputSample         : in  std_logic_vector(15 downto 0);
+      I_inputSample         : in  std_logic_vector(23 downto 0);
       I_inputSampleValid    : in  std_logic;
       I_lfo_speed_sel       : in  std_logic_vector(2 downto 0);
       I_manual_mode         : in  std_logic;
       I_manual_addr         : in  std_logic_vector(7 downto 0);
-      O_filteredSample      : out std_logic_vector(15 downto 0);
+      O_filteredSample      : out std_logic_vector(23 downto 0);
       O_filteredSampleValid : out std_logic
     );
   end component;
 
-  signal SC_in_16  : std_logic_vector(15 downto 0);
-  signal SC_out_16 : std_logic_vector(15 downto 0);
+  signal SC_in_24  : std_logic_vector(23 downto 0);
+  signal SC_out_24 : std_logic_vector(23 downto 0);
 
 begin
 
-  -- Extension de signe 8 bits -> 16 bits pour l'unité wah-wah
-  SC_in_16 <= std_logic_vector(resize(signed(I_inputSample), 16));
+  -- Extension de signe 8 bits -> 24 bits pour l'unité wah-wah
+  SC_in_24 <= std_logic_vector(resize(signed(I_inputSample), 24));
 
   wahwah_compat_inst : wahwahUnit
     port map (
       I_clock               => I_clock,
       I_reset               => I_reset,
-      I_inputSample         => SC_in_16,
+      I_inputSample         => SC_in_24,
       I_inputSampleValid    => I_inputSampleValid,
       I_lfo_speed_sel       => "010", -- 1.5 Hz par défaut
       I_manual_mode         => '0',
       I_manual_addr         => (others => '0'),
-      O_filteredSample      => SC_out_16,
+      O_filteredSample      => SC_out_24,
       O_filteredSampleValid => O_filteredSampleValid
     );
 
   -- Retour à 8 bits signé pour compatibilité interface legacy
-  O_filteredSample <= SC_out_16(15 downto 8);
+  O_filteredSample <= SC_out_24(23 downto 16);
 
 end architecture archi_firUnit;
