@@ -38,7 +38,7 @@ module xadc_pot_reader(
     .RESET(rst),
     .CONVST(1'b0),
     .CONVSTCLK(1'b0),
-    .DADDR(7'h10),
+    .DADDR(7'h11),
     .DWE(1'b0),
     .DEN(den_reg),
     .DI(16'h0000),

@@ -1,0 +1,26 @@
+flowchart LR
+    AIN[Audio in ADAU1761] --> RX[i2s_ctl RX 24 bits]
+
+    RX --> FIRL[fir left 24 bits]
+    RX --> FIRR[fir right 24 bits]
+
+    FIRL --> MIX[mixL mixR]
+    FIRR --> MIX
+    MIX --> TX[i2s_ctl TX 24 bits]
+    TX --> AOUT[Audio out ADAU1761]
+
+    POT[Pot 0 to 3.3V] --> DIV[Divider R1 24k R2 10k]
+    DIV --> JXADC[JXADC XA_P0 XA_N0]
+    JXADC --> XADC[xadc_pot_reader VAUX1]
+    XADC --> PPOS[pot_pos 8 bits]
+
+    SW[Switches mode and effect] --> FIRL
+    SW --> FIRR
+    PPOS --> FIRL
+    PPOS --> FIRR
+
+    CLK[CLK100MHz and pulse48kHz] --> RX
+    CLK --> FIRL
+    CLK --> FIRR
+    CLK --> XADC
+    CLK --> TX
