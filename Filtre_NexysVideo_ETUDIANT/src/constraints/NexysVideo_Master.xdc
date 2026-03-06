@@ -129,8 +129,8 @@ set_property -dict {PACKAGE_PIN U6 IOSTANDARD LVCMOS33} [get_ports ac_mclk]
 
 
 ##XADC Header
-set_property -dict { PACKAGE_PIN H14   IOSTANDARD LVCMOS33 } [get_ports { xa_n0 }]; #IO_L3N_T0_DQS_AD1N_15 Sch=xa_n[1]
-set_property -dict { PACKAGE_PIN J14   IOSTANDARD LVCMOS33 } [get_ports { xa_p0 }]; #IO_L3P_T0_DQS_AD1P_15 Sch=xa_p[1]
+set_property -dict { PACKAGE_PIN H14   IOSTANDARD DIFF_ANALOG } [get_ports { xa_n0 }]; #IO_L3N_T0_DQS_AD1N_15 Sch=xa_n[1]
+set_property -dict { PACKAGE_PIN J14   IOSTANDARD DIFF_ANALOG } [get_ports { xa_p0 }]; #IO_L3P_T0_DQS_AD1P_15 Sch=xa_p[1]
 #set_property -dict { PACKAGE_PIN G13   IOSTANDARD LVCMOS33 } [get_ports { xa_n[1] }]; #IO_L1N_T0_AD0N_15 Sch=xa_n[2]
 #set_property -dict { PACKAGE_PIN H13   IOSTANDARD LVCMOS33 } [get_ports { xa_p[1] }]; #IO_L1P_T0_AD0P_15 Sch=xa_p[2]
 #set_property -dict { PACKAGE_PIN G16   IOSTANDARD LVCMOS33 } [get_ports { xa_n[2] }]; #IO_L2N_T0_AD8N_15 Sch=xa_n[3]

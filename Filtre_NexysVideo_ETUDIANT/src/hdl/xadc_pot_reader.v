@@ -53,8 +53,8 @@ module xadc_pot_reader(
     .JTAGMODIFIED(),
     .OT(),
     .ALM(),
-    .VAUXP({15'b0, vauxp0}),
-    .VAUXN({15'b0, vauxn0}),
+    .VAUXP({14'b0, vauxp0, 1'b0}),
+    .VAUXN({14'b0, vauxn0, 1'b0}),
     .VP(1'b0),
     .VN(1'b0)
   );
