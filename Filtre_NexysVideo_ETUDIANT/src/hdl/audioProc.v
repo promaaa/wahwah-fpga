@@ -86,6 +86,7 @@ module audioProc(
    //////////////////////////////////////////////////////////////////////////////////////////////////////////
    clk_wiz_0 clk_1
      (
+         .reset(rst),
       // Clock in ports
       .clk_in1(CLK100MHZ),
       // Clock out ports  
