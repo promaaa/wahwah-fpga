@@ -46,20 +46,14 @@ end entity wahwah_biquad;
 
 architecture arch_wahwah_biquad of wahwah_biquad is
 
-  -- ════════════════════════════════════════════════════════════
-  -- Machine à états
-  -- ════════════════════════════════════════════════════════════
-  type state_t is (
-    S_IDLE,     -- Attente d'un nouvel échantillon
-    S_LOAD,     -- Capture de x[n], mise en place du 1er produit
-    S_MAC0,     -- acc  = b0 * x[n]
-    S_MAC1,     -- acc -= b0 * x[n-2]   (car b2 = -b0)
-    S_MAC2,     -- acc += (-a1) * y[n-1]
-    S_MAC3,     -- acc += (-a2) * y[n-2]
-    S_STORE,    -- Extraction / saturation du résultat, mise à jour des registres
-    S_DONE      -- Signaler la validité de la sortie, attendre fin du pulse valid
-  );
-  signal SR_state : state_t;
+  -- Signaux de commande issus de la FSM externe
+  signal SC_fsm_load  : std_logic;
+  signal SC_fsm_mac0  : std_logic;
+  signal SC_fsm_mac1  : std_logic;
+  signal SC_fsm_mac2  : std_logic;
+  signal SC_fsm_mac3  : std_logic;
+  signal SC_fsm_store : std_logic;
+  signal SC_fsm_done  : std_logic;
 
   -- ════════════════════════════════════════════════════════════
   -- Registres à retard (mémoires d'état DF1)
@@ -92,13 +86,29 @@ begin
   SC_mult_out <= SR_mult_a * SR_mult_b;
 
   -- ────────────────────────────────────────────────────────────
-  -- Machine à états + chemin de données séquentiel
+  -- Machine d'etat separee (fichier distinct)
+  -- ────────────────────────────────────────────────────────────
+  U_wahwah_biquad_fsm : entity work.wahwah_biquad_fsm
+    port map (
+      I_clock            => I_clock,
+      I_reset            => I_reset,
+      I_inputSampleValid => I_inputSampleValid,
+      O_load             => SC_fsm_load,
+      O_mac0             => SC_fsm_mac0,
+      O_mac1             => SC_fsm_mac1,
+      O_mac2             => SC_fsm_mac2,
+      O_mac3             => SC_fsm_mac3,
+      O_store            => SC_fsm_store,
+      O_done             => SC_fsm_done
+    );
+
+  -- ────────────────────────────────────────────────────────────
+  -- Partie opérative séquentielle
   -- ────────────────────────────────────────────────────────────
   process (I_clock, I_reset)
     variable V_acc_shifted : signed(55 downto 0);
   begin
     if I_reset = '1' then
-      SR_state   <= S_IDLE;
       SR_x_z1    <= (others => '0');
       SR_x_z2    <= (others => '0');
       SR_y_z1    <= (others => '0');
@@ -114,53 +124,34 @@ begin
       -- Par défaut, le signal valid est bas
       SR_y_valid <= '0';
 
-      case SR_state is
-
-        -- ░░ IDLE ░░ Attente d'un nouvel échantillon ░░
-        when S_IDLE =>
-          if I_inputSampleValid = '1' then
-            SR_state <= S_LOAD;
-          end if;
-
-        -- ░░ LOAD ░░ Capture x[n] et préparation du 1er produit ░░
-        when S_LOAD =>
+      if SC_fsm_load = '1' then
           SR_x_n    <= signed(I_inputSample);
           -- Préparer : b0 × x[n]
           SR_mult_a <= I_b0;
           SR_mult_b <= signed(I_inputSample);
-          SR_state  <= S_MAC0;
 
-        -- ░░ MAC0 ░░ acc = b0 × x[n] ░░
-        when S_MAC0 =>
+      elsif SC_fsm_mac0 = '1' then
           SR_acc    <= resize(SC_mult_out, 56);
           -- Préparer : b0 × x[n-2]  (sera soustrait → b2 = -b0)
           SR_mult_a <= I_b0;
           SR_mult_b <= SR_x_z2;
-          SR_state  <= S_MAC1;
 
-        -- ░░ MAC1 ░░ acc -= b0 × x[n-2] ░░
-        when S_MAC1 =>
+      elsif SC_fsm_mac1 = '1' then
           SR_acc    <= SR_acc - resize(SC_mult_out, 56);
           -- Préparer : (-a1) × y[n-1]
           SR_mult_a <= I_neg_a1;
           SR_mult_b <= SR_y_z1;
-          SR_state  <= S_MAC2;
 
-        -- ░░ MAC2 ░░ acc += (-a1) × y[n-1] ░░
-        when S_MAC2 =>
+      elsif SC_fsm_mac2 = '1' then
           SR_acc    <= SR_acc + resize(SC_mult_out, 56);
           -- Préparer : (-a2) × y[n-2]
           SR_mult_a <= I_neg_a2;
           SR_mult_b <= SR_y_z2;
-          SR_state  <= S_MAC3;
 
-        -- ░░ MAC3 ░░ acc += (-a2) × y[n-2] ░░
-        when S_MAC3 =>
-          SR_acc   <= SR_acc + resize(SC_mult_out, 56);
-          SR_state <= S_STORE;
+      elsif SC_fsm_mac3 = '1' then
+          SR_acc    <= SR_acc + resize(SC_mult_out, 56);
 
-        -- ░░ STORE ░░ Extraction du résultat + mise à jour des registres ░░
-        when S_STORE =>
+      elsif SC_fsm_store = '1' then
           -- Décalage à droite de FRAC_BITS (division par 2^22)
           V_acc_shifted := shift_right(SR_acc, FRAC_BITS);
 
@@ -180,19 +171,10 @@ begin
           SR_y_z2 <= SR_y_z1;
 
           SR_y_valid <= '1';
-          SR_state   <= S_DONE;
 
-        -- ░░ DONE ░░ Mise à jour de y[n-1] et attente fin du pulse ░░
-        when S_DONE =>
+      elsif SC_fsm_done = '1' then
           SR_y_z1 <= SR_y_out;   -- y_out est maintenant stable (registré à S_STORE)
-          if I_inputSampleValid = '0' then
-            SR_state <= S_IDLE;
-          end if;
-
-        when others =>
-          SR_state <= S_IDLE;
-
-      end case;
+      end if;
     end if;
   end process;
 
