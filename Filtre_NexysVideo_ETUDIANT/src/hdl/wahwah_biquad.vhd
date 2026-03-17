@@ -23,7 +23,6 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-library xil_defaultlib;
 
 entity wahwah_biquad is
   generic (
@@ -46,6 +45,21 @@ entity wahwah_biquad is
 end entity wahwah_biquad;
 
 architecture arch_wahwah_biquad of wahwah_biquad is
+
+  component wahwah_biquad_fsm is
+    port (
+      I_clock            : in  std_logic;
+      I_reset            : in  std_logic;
+      I_inputSampleValid : in  std_logic;
+      O_load             : out std_logic;
+      O_mac0             : out std_logic;
+      O_mac1             : out std_logic;
+      O_mac2             : out std_logic;
+      O_mac3             : out std_logic;
+      O_store            : out std_logic;
+      O_done             : out std_logic
+    );
+  end component;
 
   -- Signaux de commande issus de la FSM externe
   signal SC_fsm_load  : std_logic;
@@ -89,7 +103,7 @@ begin
   -- ────────────────────────────────────────────────────────────
   -- Machine d'etat separee (fichier distinct)
   -- ────────────────────────────────────────────────────────────
-  U_wahwah_biquad_fsm : entity xil_defaultlib.wahwah_biquad_fsm
+  U_wahwah_biquad_fsm : wahwah_biquad_fsm
     port map (
       I_clock            => I_clock,
       I_reset            => I_reset,

@@ -17,7 +17,6 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-library xil_defaultlib;
 
 entity wahwahUnit is
   port (
@@ -36,6 +35,32 @@ entity wahwahUnit is
 end entity wahwahUnit;
 
 architecture arch_wahwahUnit of wahwahUnit is
+
+  component wahwah_coeff_rom is
+    port (
+      I_address : in  std_logic_vector(7 downto 0);
+      O_b0      : out signed(23 downto 0);
+      O_neg_a1  : out signed(23 downto 0);
+      O_neg_a2  : out signed(23 downto 0)
+    );
+  end component;
+
+  component wahwah_biquad is
+    generic (
+      FRAC_BITS : natural := 22
+    );
+    port (
+      I_clock               : in  std_logic;
+      I_reset               : in  std_logic;
+      I_inputSample         : in  std_logic_vector(23 downto 0);
+      I_inputSampleValid    : in  std_logic;
+      I_b0                  : in  signed(23 downto 0);
+      I_neg_a1              : in  signed(23 downto 0);
+      I_neg_a2              : in  signed(23 downto 0);
+      O_filteredSample      : out std_logic_vector(23 downto 0);
+      O_filteredSampleValid : out std_logic
+    );
+  end component;
 
   -- ════════════════════════════════════════════════════════════
   -- Constantes : incréments de phase LFO pour différentes fréquences
@@ -100,7 +125,7 @@ begin
   -- ════════════════════════════════════════════════════════════
   -- BLOC MATERIEL 1 : Calcul des coefficients (ROM combinatoire)
   -- ════════════════════════════════════════════════════════════
-  coeff_rom_inst : entity xil_defaultlib.wahwah_coeff_rom
+  coeff_rom_inst : wahwah_coeff_rom
     port map (
       I_address => SC_coeff_addr,
       O_b0      => SC_b0,
@@ -111,7 +136,7 @@ begin
   -- ════════════════════════════════════════════════════════════
   -- BLOC MATERIEL 2 : Equation de filtrage (biquad DF1)
   -- ════════════════════════════════════════════════════════════
-  biquad_inst : entity xil_defaultlib.wahwah_biquad
+  biquad_inst : wahwah_biquad
     generic map (
       FRAC_BITS => 22
     )
