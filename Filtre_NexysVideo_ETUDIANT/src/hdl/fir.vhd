@@ -86,7 +86,7 @@ begin
   SC_lfo_addr   <= std_logic_vector(SR_lfo_phase(31 downto 24));
   SC_coeff_addr <= pot_pos when config_sw(3) = '1' else SC_lfo_addr;
 
-  coeff_rom_inst : entity work.wahwah_coeff_rom
+  coeff_rom_inst : entity xil_defaultlib.wahwah_coeff_rom
     port map (
       I_address => SC_coeff_addr,
       O_b0      => SC_b0,
@@ -94,7 +94,7 @@ begin
       O_neg_a2  => SC_neg_a2
     );
 
-  biquad_inst : entity work.wahwah_biquad
+  biquad_inst : entity xil_defaultlib.wahwah_biquad
     generic map (
       FRAC_BITS => 22
     )
