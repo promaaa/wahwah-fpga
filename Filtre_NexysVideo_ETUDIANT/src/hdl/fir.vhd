@@ -37,10 +37,26 @@ end fir;
 
 architecture wahwah_arch of fir is
 
+  component wahwahUnit is
+    port (
+      I_clock               : in  std_logic;
+      I_reset               : in  std_logic;
+      I_inputSample         : in  std_logic_vector(23 downto 0);
+      I_inputSampleValid    : in  std_logic;
+      I_lfo_speed_sel       : in  std_logic_vector(2 downto 0);
+      I_manual_mode         : in  std_logic;
+      I_manual_addr         : in  std_logic_vector(7 downto 0);
+      O_filteredSample      : out std_logic_vector(23 downto 0);
+      O_filteredSampleValid : out std_logic
+    );
+  end component;
+
   -- Signaux audio 24 bits internes
   signal D_in        : std_logic_vector(23 downto 0);
   signal D_out       : std_logic_vector(23 downto 0);
   signal D_out_makeup: std_logic_vector(23 downto 0);
+  signal S_out_valid : std_logic;
+  signal SR_wet_ready: std_logic := '0';
 
 begin
 
@@ -48,7 +64,7 @@ begin
   D_in <= din(dwidth-1 downto dwidth-24);
 
   -- ── BLOC WAH-WAH (LFO + ROM coefficients + biquad DF1) ──────────
-  wahwah_inst : entity work.wahwahUnit
+  wahwah_inst : wahwahUnit
     port map (
       I_clock               => clk,
       I_reset               => rst,
@@ -58,8 +74,19 @@ begin
       I_manual_mode         => config_sw(3),
       I_manual_addr         => pot_pos,
       O_filteredSample      => D_out,
-      O_filteredSampleValid => open
+      O_filteredSampleValid => S_out_valid
     );
+
+  process(clk, rst)
+  begin
+    if rst = '1' then
+      SR_wet_ready <= '0';
+    elsif rising_edge(clk) then
+      if S_out_valid = '1' then
+        SR_wet_ready <= '1';
+      end if;
+    end if;
+  end process;
 
   -- Compensation de niveau après le passe-bande wah-wah : gain fixe +6 dB (x2)
   -- avec saturation 16 bits pour éviter l'écrêtage numérique violent.
@@ -80,7 +107,7 @@ begin
   end process;
 
   -- Sortie : bypass ou signal filtré (config_sw(4) active l'effet)
-  dout(dwidth-1 downto dwidth-24) <= D_out_makeup when config_sw(4) = '1' else D_in;
+  dout(dwidth-1 downto dwidth-24) <= D_out_makeup when (config_sw(4) = '1' and SR_wet_ready = '1') else D_in;
 
   -- Sorties de debug inutilisées en mode wah-wah
   dbg_output_0 <= (others => '0');
