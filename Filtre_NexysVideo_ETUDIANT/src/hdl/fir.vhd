@@ -1,6 +1,7 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+library xil_defaultlib;
 
 entity fir is
 
@@ -50,6 +51,8 @@ architecture wahwah_arch of fir is
       O_filteredSampleValid : out std_logic
     );
   end component;
+
+  for all : wahwahUnit use entity xil_defaultlib.wahwahUnit(arch_wahwahUnit);
 
   -- Signaux audio 24 bits internes
   signal D_in        : std_logic_vector(23 downto 0);
