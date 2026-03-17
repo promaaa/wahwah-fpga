@@ -31,7 +31,7 @@ set proj_dir [get_property directory [current_project]]
 
 # Set project properties
 set obj [get_projects $proj_name]
-set_property "default_lib" "xil_defaultlib" $obj
+set_property "default_lib" "work" $obj
 set_property "part" "$part_num" $obj
 set_property "simulator_language" "Mixed" $obj
 set_property "target_language" "VHDL" $obj
