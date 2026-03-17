@@ -62,7 +62,7 @@ architecture arch_wahwah_biquad of wahwah_biquad is
     );
   end component;
 
-  for all : wahwah_biquad_fsm use entity xil_defaultlib.wahwah_biquad_fsm(arch_wahwah_biquad_fsm);
+  for all : wahwah_biquad_fsm use entity xil_defaultlib.wahwah_biquad_fsm;
 
   -- Signaux de commande issus de la FSM externe
   signal SC_fsm_load  : std_logic;

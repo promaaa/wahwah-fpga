@@ -63,8 +63,8 @@ architecture arch_wahwahUnit of wahwahUnit is
     );
   end component;
 
-  for all : wahwah_coeff_rom use entity xil_defaultlib.wahwah_coeff_rom(arch_wahwah_coeff_rom);
-  for all : wahwah_biquad use entity xil_defaultlib.wahwah_biquad(arch_wahwah_biquad);
+  for all : wahwah_coeff_rom use entity xil_defaultlib.wahwah_coeff_rom;
+  for all : wahwah_biquad use entity xil_defaultlib.wahwah_biquad;
 
   -- ════════════════════════════════════════════════════════════
   -- Constantes : incréments de phase LFO pour différentes fréquences

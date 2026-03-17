@@ -52,7 +52,7 @@ architecture wahwah_arch of fir is
     );
   end component;
 
-  for all : wahwahUnit use entity xil_defaultlib.wahwahUnit(arch_wahwahUnit);
+  for all : wahwahUnit use entity xil_defaultlib.wahwahUnit;
 
   -- Signaux audio 24 bits internes
   signal D_in        : std_logic_vector(23 downto 0);
