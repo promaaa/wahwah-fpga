@@ -1,7 +1,6 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-library xil_defaultlib;
 
 entity fir is
 
@@ -37,6 +36,32 @@ end fir;
 -- ═══════════════════════════════════════════════════════════════════
 
 architecture wahwah_arch of fir is
+
+  component wahwah_coeff_rom is
+    port (
+      I_address : in  std_logic_vector(7 downto 0);
+      O_b0      : out signed(23 downto 0);
+      O_neg_a1  : out signed(23 downto 0);
+      O_neg_a2  : out signed(23 downto 0)
+    );
+  end component;
+
+  component wahwah_biquad is
+    generic (
+      FRAC_BITS : natural := 22
+    );
+    port (
+      I_clock               : in  std_logic;
+      I_reset               : in  std_logic;
+      I_inputSample         : in  std_logic_vector(23 downto 0);
+      I_inputSampleValid    : in  std_logic;
+      I_b0                  : in  signed(23 downto 0);
+      I_neg_a1              : in  signed(23 downto 0);
+      I_neg_a2              : in  signed(23 downto 0);
+      O_filteredSample      : out std_logic_vector(23 downto 0);
+      O_filteredSampleValid : out std_logic
+    );
+  end component;
 
   type lfo_incr_rom_t is array(0 to 7) of unsigned(31 downto 0);
   constant LFO_INCR_ROM : lfo_incr_rom_t := (
@@ -86,7 +111,7 @@ begin
   SC_lfo_addr   <= std_logic_vector(SR_lfo_phase(31 downto 24));
   SC_coeff_addr <= pot_pos when config_sw(3) = '1' else SC_lfo_addr;
 
-  coeff_rom_inst : entity xil_defaultlib.wahwah_coeff_rom
+  coeff_rom_inst : wahwah_coeff_rom
     port map (
       I_address => SC_coeff_addr,
       O_b0      => SC_b0,
@@ -94,7 +119,7 @@ begin
       O_neg_a2  => SC_neg_a2
     );
 
-  biquad_inst : entity xil_defaultlib.wahwah_biquad
+  biquad_inst : wahwah_biquad
     generic map (
       FRAC_BITS => 22
     )
