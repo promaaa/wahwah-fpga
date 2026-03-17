@@ -38,21 +38,17 @@ end fir;
 
 architecture wahwah_arch of fir is
 
-  component wahwahUnit is
-    port (
-      I_clock               : in  std_logic;
-      I_reset               : in  std_logic;
-      I_inputSample         : in  std_logic_vector(23 downto 0);
-      I_inputSampleValid    : in  std_logic;
-      I_lfo_speed_sel       : in  std_logic_vector(2 downto 0);
-      I_manual_mode         : in  std_logic;
-      I_manual_addr         : in  std_logic_vector(7 downto 0);
-      O_filteredSample      : out std_logic_vector(23 downto 0);
-      O_filteredSampleValid : out std_logic
-    );
-  end component;
-
-  for all : wahwahUnit use entity xil_defaultlib.wahwahUnit;
+  type lfo_incr_rom_t is array(0 to 7) of unsigned(31 downto 0);
+  constant LFO_INCR_ROM : lfo_incr_rom_t := (
+    to_unsigned(  89478, 32),
+    to_unsigned( 178957, 32),
+    to_unsigned( 268435, 32),
+    to_unsigned( 357914, 32),
+    to_unsigned( 447392, 32),
+    to_unsigned( 581610, 32),
+    to_unsigned( 715828, 32),
+    to_unsigned( 894785, 32)
+  );
 
   -- Signaux audio 24 bits internes
   signal D_in        : std_logic_vector(23 downto 0);
@@ -61,21 +57,55 @@ architecture wahwah_arch of fir is
   signal S_out_valid : std_logic;
   signal SR_wet_ready: std_logic := '0';
 
+  signal SR_lfo_phase : unsigned(31 downto 0) := (others => '0');
+  signal SC_lfo_addr  : std_logic_vector(7 downto 0);
+  signal SC_lfo_incr  : unsigned(31 downto 0);
+  signal SC_coeff_addr: std_logic_vector(7 downto 0);
+  signal SC_b0        : signed(23 downto 0);
+  signal SC_neg_a1    : signed(23 downto 0);
+  signal SC_neg_a2    : signed(23 downto 0);
+
 begin
 
   -- Chemin direct en 24 bits
   D_in <= din(dwidth-1 downto dwidth-24);
 
-  -- ── BLOC WAH-WAH (LFO + ROM coefficients + biquad DF1) ──────────
-  wahwah_inst : wahwahUnit
+  SC_lfo_incr <= LFO_INCR_ROM(to_integer(unsigned(config_sw(2 downto 0))));
+
+  process(clk, rst)
+  begin
+    if rst = '1' then
+      SR_lfo_phase <= (others => '0');
+    elsif rising_edge(clk) then
+      if ce = '1' then
+        SR_lfo_phase <= SR_lfo_phase + SC_lfo_incr;
+      end if;
+    end if;
+  end process;
+
+  SC_lfo_addr   <= std_logic_vector(SR_lfo_phase(31 downto 24));
+  SC_coeff_addr <= pot_pos when config_sw(3) = '1' else SC_lfo_addr;
+
+  coeff_rom_inst : entity work.wahwah_coeff_rom
+    port map (
+      I_address => SC_coeff_addr,
+      O_b0      => SC_b0,
+      O_neg_a1  => SC_neg_a1,
+      O_neg_a2  => SC_neg_a2
+    );
+
+  biquad_inst : entity work.wahwah_biquad
+    generic map (
+      FRAC_BITS => 22
+    )
     port map (
       I_clock               => clk,
       I_reset               => rst,
       I_inputSample         => D_in,
       I_inputSampleValid    => ce,
-      I_lfo_speed_sel       => config_sw(2 downto 0),
-      I_manual_mode         => config_sw(3),
-      I_manual_addr         => pot_pos,
+      I_b0                  => SC_b0,
+      I_neg_a1              => SC_neg_a1,
+      I_neg_a2              => SC_neg_a2,
       O_filteredSample      => D_out,
       O_filteredSampleValid => S_out_valid
     );
