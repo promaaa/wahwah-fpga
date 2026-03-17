@@ -18,19 +18,29 @@ set tb_file [file join $hdl_dir tb_wahwahUnit.vhd]
 set src_fs [get_filesets sources_1]
 set sim_fs [get_filesets sim_1]
 
-set_property default_lib work [current_project]
+set_property default_lib xil_defaultlib [current_project]
 
 foreach f $wah_files {
   if {[file exists $f]} {
     add_files -norecurse -fileset $src_fs $f
     set f_obj [get_files -quiet -of_objects $src_fs $f]
     if {[llength $f_obj] > 0} {
-      set_property library work $f_obj
+      set_property library xil_defaultlib $f_obj
       set_property used_in_synthesis true $f_obj
       set_property used_in_implementation true $f_obj
     }
   } else {
     puts "WARNING: missing file: $f"
+  }
+}
+
+set fir_file [file join $hdl_dir fir.vhd]
+if {[file exists $fir_file]} {
+  set fir_obj [get_files -quiet -of_objects $src_fs $fir_file]
+  if {[llength $fir_obj] > 0} {
+    set_property library xil_defaultlib $fir_obj
+    set_property used_in_synthesis true $fir_obj
+    set_property used_in_implementation true $fir_obj
   }
 }
 
