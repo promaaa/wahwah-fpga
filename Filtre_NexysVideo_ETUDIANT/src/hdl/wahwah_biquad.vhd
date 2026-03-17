@@ -23,6 +23,7 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+library xil_defaultlib;
 
 entity wahwah_biquad is
   generic (
@@ -88,7 +89,7 @@ begin
   -- ────────────────────────────────────────────────────────────
   -- Machine d'etat separee (fichier distinct)
   -- ────────────────────────────────────────────────────────────
-  U_wahwah_biquad_fsm : entity work.wahwah_biquad_fsm
+  U_wahwah_biquad_fsm : entity xil_defaultlib.wahwah_biquad_fsm
     port map (
       I_clock            => I_clock,
       I_reset            => I_reset,

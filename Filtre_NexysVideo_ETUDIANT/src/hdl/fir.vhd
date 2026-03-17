@@ -1,6 +1,7 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+library xil_defaultlib;
 
 entity fir is
 
@@ -37,20 +38,6 @@ end fir;
 
 architecture wahwah_arch of fir is
 
-  component wahwahUnit is
-    port (
-      I_clock               : in  std_logic;
-      I_reset               : in  std_logic;
-      I_inputSample         : in  std_logic_vector(23 downto 0);
-      I_inputSampleValid    : in  std_logic;
-      I_lfo_speed_sel       : in  std_logic_vector(2 downto 0);
-      I_manual_mode         : in  std_logic;
-      I_manual_addr         : in  std_logic_vector(7 downto 0);
-      O_filteredSample      : out std_logic_vector(23 downto 0);
-      O_filteredSampleValid : out std_logic
-    );
-  end component;
-
   -- Signaux audio 24 bits internes
   signal D_in        : std_logic_vector(23 downto 0);
   signal D_out       : std_logic_vector(23 downto 0);
@@ -64,7 +51,7 @@ begin
   D_in <= din(dwidth-1 downto dwidth-24);
 
   -- ── BLOC WAH-WAH (LFO + ROM coefficients + biquad DF1) ──────────
-  wahwah_inst : wahwahUnit
+  wahwah_inst : entity xil_defaultlib.wahwahUnit
     port map (
       I_clock               => clk,
       I_reset               => rst,
