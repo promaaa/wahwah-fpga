@@ -13,6 +13,14 @@ set wah_files [list \
   [file join $hdl_dir wahwah_coeff_rom.vhd] \
 ]
 
+set critical_hdl_files [list \
+  [file join $hdl_dir fir.vhd] \
+  [file join $hdl_dir wahwahUnit.vhd] \
+  [file join $hdl_dir wahwah_biquad.vhd] \
+  [file join $hdl_dir wahwah_biquad_fsm.vhd] \
+  [file join $hdl_dir wahwah_coeff_rom.vhd] \
+]
+
 set tb_file [file join $hdl_dir tb_wahwahUnit.vhd]
 
 set src_fs [get_filesets sources_1]
@@ -41,6 +49,27 @@ if {[file exists $fir_file]} {
     set_property library xil_defaultlib $fir_obj
     set_property used_in_synthesis true $fir_obj
     set_property used_in_implementation true $fir_obj
+  }
+}
+
+# Purge stale references (exported copies / old paths) for critical wah-wah files,
+# then re-add canonical files from src/hdl to avoid unresolved black boxes.
+foreach f $critical_hdl_files {
+  set base [file tail $f]
+  set old_refs [get_files -quiet -of_objects $src_fs *$base]
+  foreach old_f $old_refs {
+    remove_files -quiet $old_f
+  }
+  if {[file exists $f]} {
+    add_files -norecurse -fileset $src_fs $f
+    set f_obj [get_files -quiet -of_objects $src_fs $f]
+    if {[llength $f_obj] > 0} {
+      set_property library xil_defaultlib $f_obj
+      set_property used_in_synthesis true $f_obj
+      set_property used_in_implementation true $f_obj
+    }
+  } else {
+    puts "WARNING: missing critical file: $f"
   }
 }
 

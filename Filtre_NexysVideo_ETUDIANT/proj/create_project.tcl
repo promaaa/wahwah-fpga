@@ -121,6 +121,12 @@ if {[llength [get_files -quiet -of_objects $sim_fs */tb_wahwahUnit.vhd]] > 0} {
   set_property top tb_wahwahUnit $sim_fs
 }
 
+# Enforce canonical registration/order for wah-wah HDL units
+set fix_order_script [file normalize [file join $orig_proj_dir fix_compile_order.tcl]]
+if {[file exists $fix_order_script]} {
+  source $fix_order_script
+}
+
 #puts "INFO: Project created:$proj_name"
 
 # Comment the following section, if there is no block design
