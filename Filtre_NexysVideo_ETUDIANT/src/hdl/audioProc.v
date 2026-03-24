@@ -183,13 +183,41 @@ module audioProc(
    wire speed_slow;
    wire speed_mid;
    wire speed_fast;
+   reg [1:0] selected_mode;
+   reg [4:0] buttons_db_d;
+   wire btn_slow_rise;
+   wire btn_mid_rise;
+   wire btn_fast_rise;
+   wire btn_bypass_rise;
+
+   assign btn_slow_rise = buttons_db[1] & ~buttons_db_d[1];
+   assign btn_mid_rise = buttons_db[2] & ~buttons_db_d[2];
+   assign btn_fast_rise = buttons_db[4] & ~buttons_db_d[4];
+   assign btn_bypass_rise = buttons_db[0] & ~buttons_db_d[0];
+
+   always @(posedge clk_out_100MHZ or posedge rst) begin
+      if (rst) begin
+         selected_mode <= 2'b00;
+         buttons_db_d <= 5'b00000;
+      end else begin
+         buttons_db_d <= buttons_db;
+         if (btn_slow_rise)
+            selected_mode <= 2'b01;
+         else if (btn_mid_rise)
+            selected_mode <= 2'b10;
+         else if (btn_fast_rise)
+            selected_mode <= 2'b11;
+         else if (btn_bypass_rise)
+            selected_mode <= 2'b00;
+      end
+   end
 
    assign inputLeftSample = in_audioL;
    assign inputRightSample = in_audioR;
-   assign speed_slow = buttons_db[1];
-   assign speed_mid = buttons_db[2];
-   assign speed_fast = buttons_db[4];
-   assign effect_on = speed_slow | speed_mid | speed_fast;
+   assign speed_slow = (selected_mode == 2'b01);
+   assign speed_mid = (selected_mode == 2'b10);
+   assign speed_fast = (selected_mode == 2'b11);
+   assign effect_on = (selected_mode != 2'b00);
    assign {configSw[2], configSw[1], configSw[0]} = speed_fast ? 3'b110 :
                                                     speed_mid  ? 3'b011 :
                                                                  3'b000;
