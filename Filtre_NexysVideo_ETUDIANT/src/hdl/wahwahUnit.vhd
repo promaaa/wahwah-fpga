@@ -1,16 +1,18 @@
 --------------------------------------------------------------------------------
 -- wahwahUnit.vhd — Unité wah-wah complète (Architecture structurale)
 --
--- Ce module est maintenant une architecture structurale qui connecte :
---   - BLOC 1 : wahwah_control (machine d'état - contrôle LFO)
---              Gère l'accumulateur de phase et le décalage de fréquence centrale
---   - BLOC 2 : wahwah_operative (partie opérative - filtrage)
---              ROM de coefficients + filtre biquad DF1
+-- Ce module est une architecture structurale qui connecte :
+--   - BLOC 1 : wahwah_control (Machine d'état UNIQUE + LFO)
+--              - Accumulateur de phase LFO
+--              - FSM pour le filtrage biquad
+--   - BLOC 2 : wahwah_operative (Partie opérative - purely combinatoire)
+--              - ROM de coefficients + multiplieur + accumulateur
+--              - PAS de machine d'état
 --
--- Cette séparation machine d'état / partie opérative permet :
---   - Une meilleure modularité et réutilisabilité
---   - Une vérification plus facile des deux parties indépendamment
---   - Une compréhension claire du flux de données et de contrôle
+-- Cette séparation permet :
+--   - Une seule machine d'état dans le contrôle
+--   - Partie opérative purely combinatoire (data-path)
+--   - Meilleure modularité et réutilisabilité
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -34,13 +36,19 @@ end entity wahwahUnit;
 
 architecture arch_wahwahUnit of wahwahUnit is
 
-  -- Signaux d'interconnexion entre contrôle et opérative
-  signal S_lfo_addr : std_logic_vector(7 downto 0);
+  -- Signaux d'interconnexion vers la partie opérative
+  signal S_lfo_addr    : std_logic_vector(7 downto 0);
+  signal S_mac_stage   : std_logic_vector(2 downto 0);
+  signal S_x_data      : signed(15 downto 0);
+  signal S_y_z1_data   : signed(15 downto 0);
+  signal S_y_z2_data   : signed(15 downto 0);
+  signal S_acc_out     : signed(35 downto 0);
+  signal S_y_we        : std_logic;
 
 begin
 
   -- ════════════════════════════════════════════════════════════
-  -- BLOC 1 : Contrôle (Machine d'état)
+  -- BLOC 1 : Contrôle (Machine d'état UNIQUE + LFO)
   -- ════════════════════════════════════════════════════════════
   control_inst : entity work.wahwah_control
     port map (
@@ -51,11 +59,21 @@ begin
       I_freq_up           => I_freq_up,
       I_freq_down         => I_freq_down,
       O_lfo_addr          => S_lfo_addr,
-      O_lfo_incr          => open  -- non utilisé dans l'architecture actuelle
+      O_lfo_incr          => open,
+      O_filterStart       => open,
+      O_coef_we           => open,
+      O_mac_start         => open,
+      O_mac_stage         => S_mac_stage,
+      O_x_data            => S_x_data,
+      O_y_z1_data         => S_y_z1_data,
+      O_y_z2_data         => S_y_z2_data,
+      I_y_result          => (others => '0'),
+      O_y_we              => S_y_we,
+      O_filteredValid     => O_filteredSampleValid
     );
 
   -- ════════════════════════════════════════════════════════════
-  -- BLOC 2 : Partie opérative (Chemin de données)
+  -- BLOC 2 : Partie opérative (Data-path purely combinatoire)
   -- ════════════════════════════════════════════════════════════
   operative_inst : entity work.wahwah_operative
     generic map (
@@ -67,8 +85,14 @@ begin
       I_inputSample         => I_inputSample,
       I_inputSampleValid    => I_inputSampleValid,
       I_lfo_addr            => S_lfo_addr,
+      I_mac_stage           => S_mac_stage,
+      I_x_data              => S_x_data,
+      I_y_z1_data           => S_y_z1_data,
+      I_y_z2_data           => S_y_z2_data,
+      I_acc                 => S_acc_out,
+      O_acc_out             => S_acc_out,
       O_filteredSample      => O_filteredSample,
-      O_filteredSampleValid => O_filteredSampleValid
+      O_filteredSampleValid => open
     );
 
 end architecture arch_wahwahUnit;

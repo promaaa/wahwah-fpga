@@ -1,13 +1,14 @@
 --------------------------------------------------------------------------------
--- wahwah_control.vhd — Contrôleur LFO (Machine d'état)
+-- wahwah_control.vhd — Contrôleur LFO + FSM principale (Machine d'état unique)
 --
--- Partie contrôle du module wah-wah :
+-- Ce module contient :
 --   - Accumulateur de phase 32 bits pour le LFO
 --   - Compteur de pas de fréquence pour ajuster la fréquence centrale
 --     en réponse aux boutons freq_up / freq_down
+--   - FSM unique pour orchestrer le filtrage biquad
 --
--- Ce module génère les signaux de contrôle pour la partie opérative
--- (wahwah_operative) qui gère le filtrage.
+-- La partie opérative (wahwah_operative) est désormais purement combinatoire
+-- (chemin de données) et ne contient plus de machine d'état.
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -25,7 +26,18 @@ entity wahwah_control is
     I_freq_down         : in  std_logic := '0';
     -- Sorties vers la partie opérative
     O_lfo_addr          : out std_logic_vector(7 downto 0);
-    O_lfo_incr          : out unsigned(31 downto 0)
+    O_lfo_incr          : out unsigned(31 downto 0);
+    -- Signaux de contrôle du chemin de données
+    O_filterStart       : out std_logic;  -- Démarre le filtrage
+    O_coef_we           : out std_logic;  -- Write enable pour coef (inutilisé mais gardé)
+    O_mac_start         : out std_logic;  -- Démarre le MAC
+    O_mac_stage         : out std_logic_vector(2 downto 0);  -- Stage MAC (0-4)
+    O_x_data            : out signed(15 downto 0);  -- x[n] à filtrer
+    O_y_z1_data         : out signed(15 downto 0);  -- y[n-1]
+    O_y_z2_data         : out signed(15 downto 0);  -- y[n-2]
+    I_y_result          : in  signed(15 downto 0);  -- Résultat y[n]
+    O_y_we              : out std_logic;  -- Write enable pour y result
+    O_filteredValid     : out std_logic   -- Sortie filtrée valide
   );
 end entity wahwah_control;
 
@@ -50,7 +62,7 @@ architecture arch_wahwah_control of wahwah_control is
   );
 
   -- ════════════════════════════════════════════════════════════
-  -- Registres internes
+  -- Registres LFO
   -- ════════════════════════════════════════════════════════════
   signal SR_lfo_phase     : unsigned(31 downto 0) := (others => '0');
   signal SR_center_offset : unsigned(7 downto 0)  := (others => '0');
@@ -59,6 +71,35 @@ architecture arch_wahwah_control of wahwah_control is
   -- Signaux intermédiaires
   signal SC_lfo_addr_base : unsigned(7 downto 0);
   signal SC_lfo_incr     : unsigned(31 downto 0);
+
+  -- ════════════════════════════════════════════════════════════
+  -- Registres de la FSM de filtrage
+  -- ════════════════════════════════════════════════════════════
+  type state_t is (
+    S_IDLE,     -- Attente d'un nouvel échantillon
+    S_LOAD,     -- Capture de x[n], mise en place du 1er produit
+    S_MAC0,     -- acc  = b0 * x[n]
+    S_MAC1,     -- acc -= b0 * x[n-2]   (car b2 = -b0)
+    S_MAC2,     -- acc += (-a1) * y[n-1]
+    S_MAC3,     -- acc += (-a2) * y[n-2]
+    S_STORE,    -- Extraction / saturation du résultat
+    S_DONE      -- Signaler la validité de la sortie
+  );
+  signal SR_fsm_state : state_t;
+
+  -- Registres à retard pour le filtrage
+  signal SR_x_z1 : signed(15 downto 0);  -- x[n-1]
+  signal SR_x_z2 : signed(15 downto 0);  -- x[n-2]
+  signal SR_y_z1 : signed(15 downto 0);  -- y[n-1]
+  signal SR_y_z2 : signed(15 downto 0);  -- y[n-2]
+  signal SR_x_n  : signed(15 downto 0);  -- x[n] échantillon courant
+
+  -- Accumulateur pour le MAC
+  signal SR_acc  : signed(35 downto 0);
+
+  -- Registre résultat
+  signal SR_y_out    : signed(15 downto 0);
+  signal SR_y_valid  : std_logic;
 
 begin
 
@@ -69,7 +110,6 @@ begin
 
   -- ────────────────────────────────────────────────────────────
   -- LFO : accumulateur de phase 32 bits
-  -- Avance d'un incrément à chaque nouvel échantillon audio
   -- ────────────────────────────────────────────────────────────
   process (I_clock, I_reset)
   begin
@@ -102,8 +142,112 @@ begin
   -- Les 8 bits de poids fort du phase accumulator → adresse ROM
   SC_lfo_addr_base <= SR_lfo_phase(31 downto 24);
 
-  -- Sorties
+  -- Sorties LFO
   O_lfo_addr <= std_logic_vector(SC_lfo_addr_base + SR_center_offset);
   O_lfo_incr <= SC_lfo_incr;
+
+  -- ────────────────────────────────────────────────────────────
+  -- FSM principale pour le filtrage biquad
+  -- ────────────────────────────────────────────────────────────
+  process (I_clock, I_reset)
+    variable V_acc_shifted : signed(35 downto 0);
+  begin
+    if I_reset = '1' then
+      SR_fsm_state <= S_IDLE;
+      SR_x_z1      <= (others => '0');
+      SR_x_z2      <= (others => '0');
+      SR_y_z1      <= (others => '0');
+      SR_y_z2      <= (others => '0');
+      SR_x_n       <= (others => '0');
+      SR_acc       <= (others => '0');
+      SR_y_out     <= (others => '0');
+      SR_y_valid   <= '0';
+
+    elsif rising_edge(I_clock) then
+      -- Par défaut, valid est bas
+      SR_y_valid <= '0';
+
+      case SR_fsm_state is
+
+        -- ░░ IDLE ░░ Attente d'un nouvel échantillon ░░
+        when S_IDLE =>
+          if I_inputSampleValid = '1' then
+            SR_fsm_state <= S_LOAD;
+          end if;
+
+        -- ░░ LOAD ░░ Capture x[n] ░░
+        when S_LOAD =>
+          SR_x_n <= signed(I_inputSample);
+          SR_fsm_state <= S_MAC0;
+
+        -- ░░ MAC0 ░░ acc = b0 × x[n] (fait combinatoirement via operative) ░░
+        when S_MAC0 =>
+          SR_fsm_state <= S_MAC1;
+
+        -- ░░ MAC1 ░░ acc -= b0 × x[n-2] ░░
+        when S_MAC1 =>
+          SR_fsm_state <= S_MAC2;
+
+        -- ░░ MAC2 ░░ acc += (-a1) × y[n-1] ░░
+        when S_MAC2 =>
+          SR_fsm_state <= S_MAC3;
+
+        -- ░░ MAC3 ░░ acc += (-a2) × y[n-2] ░░
+        when S_MAC3 =>
+          SR_fsm_state <= S_STORE;
+
+        -- ░░ STORE ░░ Extraction du résultat + saturation ░░
+        when S_STORE =>
+          V_acc_shifted := shift_right(SR_acc, 14);  -- FRAC_BITS = 14
+
+          if V_acc_shifted > to_signed(32767, 36) then
+            SR_y_out <= to_signed(32767, 16);
+          elsif V_acc_shifted < to_signed(-32768, 36) then
+            SR_y_out <= to_signed(-32768, 16);
+          else
+            SR_y_out <= V_acc_shifted(15 downto 0);
+          end if;
+
+          -- Mise à jour des registres à retard
+          SR_x_z2 <= SR_x_z1;
+          SR_x_z1 <= SR_x_n;
+          SR_y_z2 <= SR_y_z1;
+
+          SR_y_valid <= '1';
+          SR_fsm_state <= S_DONE;
+
+        -- ░░ DONE ░░ Mise à jour y[n-1] et retour IDLE ░░
+        when S_DONE =>
+          SR_y_z1 <= SR_y_out;
+          if I_inputSampleValid = '0' then
+            SR_fsm_state <= S_IDLE;
+          end if;
+
+        when others =>
+          SR_fsm_state <= S_IDLE;
+
+      end case;
+    end if;
+  end process;
+
+  -- ────────────────────────────────────────────────────────────
+  -- Sorties de contrôle
+  -- ────────────────────────────────────────────────────────────
+  O_filterStart  <= '1' when SR_fsm_state = S_LOAD else '0';
+  O_coef_we      <= '0';
+  O_mac_start    <= '1' when SR_fsm_state = S_MAC0 else '0';
+  
+  with SR_fsm_state select O_mac_stage <=
+    "001" when S_MAC0,
+    "010" when S_MAC1,
+    "011" when S_MAC2,
+    "100" when S_MAC3,
+    "000" when others;
+
+  O_x_data    <= SR_x_n;
+  O_y_z1_data <= SR_y_z1;
+  O_y_z2_data <= SR_y_z2;
+  O_y_we      <= '1' when SR_fsm_state = S_STORE else '0';
+  O_filteredValid <= SR_y_valid;
 
 end architecture arch_wahwah_control;

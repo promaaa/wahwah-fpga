@@ -1,12 +1,16 @@
 --------------------------------------------------------------------------------
--- wahwah_operative.vhd — Partie opérative du filtre wah-wah
+-- wahwah_operative.vhd — Partie opérative purely combinatoire (Data-path)
 --
--- Partie opérative du module wah-wah :
+-- Ce module est désormais purement combinatoire (pas de machine d'état).
+-- Il effectue les calculs du filtre biquad sous contrôle de la FSM
+-- située dans wahwah_control.
+--
+-- Opérations :
 --   - ROM de coefficients (coef b0, -a1, -a2 en Q1.14)
---   - Filtre biquad Direct Form 1 séquentiel
+--   - Multiplieur pour les produits du MAC
+--   - Accumulateur 36 bits pour les opérations MAC
 --
--- Ce module reçoit les signaux de contrôle de la partie contrôle
--- (wahwah_control) et effectue le filtrage effectif.
+-- La FSM dans wahwah_control orchestre ces opérations en quatre cycles.
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -24,7 +28,15 @@ entity wahwah_operative is
     I_inputSampleValid    : in  std_logic;
     -- Adresse LFO来自于 la partie contrôle
     I_lfo_addr            : in  std_logic_vector(7 downto 0);
-    -- Échantillon filtré
+    -- Signaux de contrôle depuis la FSM (wahwah_control)
+    I_mac_stage           : in  std_logic_vector(2 downto 0);  -- Stage MAC (0-4)
+    I_x_data              : in  signed(15 downto 0);   -- x[n]
+    I_y_z1_data           : in  signed(15 downto 0);   -- y[n-1]
+    I_y_z2_data           : in  signed(15 downto 0);   -- y[n-2]
+    -- Accumulateur (venant du registre dans control ou local)
+    I_acc                 : in  signed(35 downto 0);
+    -- Sorties
+    O_acc_out             : out signed(35 downto 0);  -- Accumulateur mis à jour
     O_filteredSample      : out std_logic_vector(15 downto 0);
     O_filteredSampleValid : out std_logic
   );
@@ -33,47 +45,21 @@ end entity wahwah_operative;
 architecture arch_wahwah_operative of wahwah_operative is
 
   -- ════════════════════════════════════════════════════════════
-  -- Signaux internes
-  -- ════════════════════════════════════════════════════════════
-
   -- Coefficients issus de la ROM
+  -- ════════════════════════════════════════════════════════════
   signal SC_b0     : signed(15 downto 0);
   signal SC_neg_a1 : signed(15 downto 0);
   signal SC_neg_a2 : signed(15 downto 0);
 
   -- ════════════════════════════════════════════════════════════
-  -- Machine à états pour le filtrage biquad
+  -- Signaux internes pour le MAC
   -- ════════════════════════════════════════════════════════════
-  type state_t is (
-    S_IDLE,     -- Attente d'un nouvel échantillon
-    S_LOAD,     -- Capture de x[n], mise en place du 1er produit
-    S_MAC0,     -- acc  = b0 * x[n]
-    S_MAC1,     -- acc -= b0 * x[n-2]   (car b2 = -b0)
-    S_MAC2,     -- acc += (-a1) * y[n-1]
-    S_MAC3,     -- acc += (-a2) * y[n-2]
-    S_STORE,    -- Extraction / saturation du résultat, mise à jour des registres
-    S_DONE      -- Signaler la validité de la sortie, attendre fin du pulse valid
-  );
-  signal SR_state : state_t;
+  signal SC_mult_a    : signed(15 downto 0);
+  signal SC_mult_b    : signed(15 downto 0);
+  signal SC_mult_out  : signed(31 downto 0);
 
-  -- ════════════════════════════════════════════════════════════
-  -- Registres à retard (mémoires d'état DF1)
-  -- ════════════════════════════════════════════════════════════
-  signal SR_x_z1 : signed(15 downto 0);  -- x[n-1] (conservé pour généralité)
-  signal SR_x_z2 : signed(15 downto 0);  -- x[n-2]
-  signal SR_y_z1 : signed(15 downto 0);  -- y[n-1]
-  signal SR_y_z2 : signed(15 downto 0);  -- y[n-2]
-
-  -- Échantillon courant capturé
-  signal SR_x_n : signed(15 downto 0);
-
-  -- ════════════════════════════════════════════════════════════
-  -- Chemin de données MAC (Multiply-Accumulate)
-  -- ════════════════════════════════════════════════════════════
-  signal SR_mult_a    : signed(15 downto 0);  -- opérande A du multiplieur
-  signal SR_mult_b    : signed(15 downto 0);  -- opérande B du multiplieur
-  signal SC_mult_out  : signed(31 downto 0);  -- produit combinatoire (DSP48)
-  signal SR_acc       : signed(35 downto 0);  -- accumulateur 36 bits
+  -- Registre accumulateur (séquentiel)
+  signal SR_acc       : signed(35 downto 0);
 
   -- Résultat filtré
   signal SR_y_out     : signed(15 downto 0);
@@ -82,7 +68,7 @@ architecture arch_wahwah_operative of wahwah_operative is
 begin
 
   -- ────────────────────────────────────────────────────────────
-  -- BLOC MATERIEL 1 : Calcul des coefficients (ROM combinatoire)
+  -- BLOC 1 : ROM de coefficients (combinatoire)
   -- ────────────────────────────────────────────────────────────
   coeff_rom_inst : entity work.wahwah_coeff_rom
     port map (
@@ -93,113 +79,75 @@ begin
     );
 
   -- ────────────────────────────────────────────────────────────
-  -- Multiplieur combinatoire (synthétisé sur slice DSP48)
+  -- BLOC 2 : Sélection des opérandes selon stage MAC
   -- ────────────────────────────────────────────────────────────
-  SC_mult_out <= SR_mult_a * SR_mult_b;
+  with I_mac_stage select SC_mult_a <=
+    SC_b0     when "001",  -- MAC0: b0 * x[n]
+    SC_b0     when "010",  -- MAC1: b0 * x[n-2]
+    SC_neg_a1 when "011",  -- MAC2: (-a1) * y[n-1]
+    SC_neg_a2 when "100",  -- MAC3: (-a2) * y[n-2]
+    (others => '0') when others;
+
+  with I_mac_stage select SC_mult_b <=
+    I_x_data    when "001",  -- MAC0: b0 * x[n]
+    I_y_z2_data when "010",  -- MAC1: b0 * x[n-2]
+    I_y_z1_data when "011",  -- MAC2: (-a1) * y[n-1]
+    I_y_z2_data when "100",  -- MAC3: (-a2) * y[n-2]
+    (others => '0') when others;
 
   -- ────────────────────────────────────────────────────────────
-  -- BLOC MATERIEL 2 : Equation de filtrage (biquad DF1)
-  -- Machine à états + chemin de données séquentiel
+  -- BLOC 3 : Multiplieur (DSP48)
+  -- ────────────────────────────────────────────────────────────
+  SC_mult_out <= SC_mult_a * SC_mult_b;
+
+  -- ────────────────────────────────────────────────────────────
+  -- BLOC 4 : Accumulateur séquentiel
+  -- ────────────────────────────────────────────────────────────
+  process (I_clock, I_reset)
+  begin
+    if I_reset = '1' then
+      SR_acc <= (others => '0');
+    elsif rising_edge(I_clock) then
+      if I_mac_stage = "001" then  -- MAC0: initialisation
+        SR_acc <= resize(SC_mult_out, 36);
+      elsif I_mac_stage = "010" then  -- MAC1: soustraction
+        SR_acc <= SR_acc - resize(SC_mult_out, 36);
+      elsif I_mac_stage = "011" then  -- MAC2: addition
+        SR_acc <= SR_acc + resize(SC_mult_out, 36);
+      elsif I_mac_stage = "100" then  -- MAC3: addition finale
+        SR_acc <= SR_acc + resize(SC_mult_out, 36);
+      end if;
+    end if;
+  end process;
+
+  O_acc_out <= SR_acc;
+
+  -- ────────────────────────────────────────────────────────────
+  -- BLOC 5 : Extraction et saturation du résultat
   -- ────────────────────────────────────────────────────────────
   process (I_clock, I_reset)
     variable V_acc_shifted : signed(35 downto 0);
   begin
     if I_reset = '1' then
-      SR_state   <= S_IDLE;
-      SR_x_z1    <= (others => '0');
-      SR_x_z2    <= (others => '0');
-      SR_y_z1    <= (others => '0');
-      SR_y_z2    <= (others => '0');
-      SR_x_n     <= (others => '0');
-      SR_mult_a  <= (others => '0');
-      SR_mult_b  <= (others => '0');
-      SR_acc     <= (others => '0');
       SR_y_out   <= (others => '0');
       SR_y_valid <= '0';
-
     elsif rising_edge(I_clock) then
-      -- Par défaut, le signal valid est bas
       SR_y_valid <= '0';
-
-      case SR_state is
-
-        -- ░░ IDLE ░░ Attente d'un nouvel échantillon ░░
-        when S_IDLE =>
-          if I_inputSampleValid = '1' then
-            SR_state <= S_LOAD;
-          end if;
-
-        -- ░░ LOAD ░░ Capture x[n] et préparation du 1er produit ░░
-        when S_LOAD =>
-          SR_x_n    <= signed(I_inputSample);
-          -- Préparer : b0 × x[n]
-          SR_mult_a <= SC_b0;
-          SR_mult_b <= signed(I_inputSample);
-          SR_state  <= S_MAC0;
-
-        -- ░░ MAC0 ░░ acc = b0 × x[n] ░░
-        when S_MAC0 =>
-          SR_acc    <= resize(SC_mult_out, 36);
-          -- Préparer : b0 × x[n-2]  (sera soustrait → b2 = -b0)
-          SR_mult_a <= SC_b0;
-          SR_mult_b <= SR_x_z2;
-          SR_state  <= S_MAC1;
-
-        -- ░░ MAC1 ░░ acc -= b0 × x[n-2] ░░
-        when S_MAC1 =>
-          SR_acc    <= SR_acc - resize(SC_mult_out, 36);
-          -- Préparer : (-a1) × y[n-1]
-          SR_mult_a <= SC_neg_a1;
-          SR_mult_b <= SR_y_z1;
-          SR_state  <= S_MAC2;
-
-        -- ░░ MAC2 ░░ acc += (-a1) × y[n-1] ░░
-        when S_MAC2 =>
-          SR_acc    <= SR_acc + resize(SC_mult_out, 36);
-          -- Préparer : (-a2) × y[n-2]
-          SR_mult_a <= SC_neg_a2;
-          SR_mult_b <= SR_y_z2;
-          SR_state  <= S_MAC3;
-
-        -- ░░ MAC3 ░░ acc += (-a2) × y[n-2] ░░
-        when S_MAC3 =>
-          SR_acc   <= SR_acc + resize(SC_mult_out, 36);
-          SR_state <= S_STORE;
-
-        -- ░░ STORE ░░ Extraction du résultat + mise à jour des registres ░░
-        when S_STORE =>
-          -- Décalage à droite de FRAC_BITS (division par 2^14)
-          V_acc_shifted := shift_right(SR_acc, FRAC_BITS);
-
-          -- Saturation à 16 bits signés
-          if V_acc_shifted > to_signed(32767, 36) then
-            SR_y_out <= to_signed(32767, 16);
-          elsif V_acc_shifted < to_signed(-32768, 36) then
-            SR_y_out <= to_signed(-32768, 16);
-          else
-            SR_y_out <= V_acc_shifted(15 downto 0);
-          end if;
-
-          -- Mise à jour des registres à retard de l'entrée
-          SR_x_z2 <= SR_x_z1;
-          SR_x_z1 <= SR_x_n;
-          -- Mise à jour du registre sortie y[n-2]
-          SR_y_z2 <= SR_y_z1;
-
-          SR_y_valid <= '1';
-          SR_state   <= S_DONE;
-
-        -- ░░ DONE ░░ Mise à jour de y[n-1] et attente fin du pulse ░░
-        when S_DONE =>
-          SR_y_z1 <= SR_y_out;   -- y_out est maintenant stable (registré à S_STORE)
-          if I_inputSampleValid = '0' then
-            SR_state <= S_IDLE;
-          end if;
-
-        when others =>
-          SR_state <= S_IDLE;
-
-      end case;
+      
+      if I_mac_stage = "000" then  -- État IDLE ou STORE terminé
+        -- Calcul du résultat (un cycle après STORE)
+        V_acc_shifted := shift_right(SR_acc, FRAC_BITS);
+        
+        if V_acc_shifted > to_signed(32767, 36) then
+          SR_y_out <= to_signed(32767, 16);
+        elsif V_acc_shifted < to_signed(-32768, 36) then
+          SR_y_out <= to_signed(-32768, 16);
+        else
+          SR_y_out <= V_acc_shifted(15 downto 0);
+        end if;
+        
+        SR_y_valid <= '1';
+      end if;
     end if;
   end process;
 
