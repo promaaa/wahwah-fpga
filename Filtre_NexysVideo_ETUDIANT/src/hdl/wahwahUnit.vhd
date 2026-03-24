@@ -1,18 +1,17 @@
--------------------------------------------------------------------------------
--- wahwahUnit.vhd — Unité wah-wah complète
+--------------------------------------------------------------------------------
+-- wahwahUnit.vhd — Unité wah-wah complète (Architecture structurale)
 --
--- Connecte les deux blocs matériels distincts :
---   BLOC 1 : Calcul des coefficients  (LFO → ROM de coefficients)
---   BLOC 2 : Equation de filtrage      (biquad DF1 séquentiel)
+-- Ce module est maintenant une architecture structurale qui connecte :
+--   - BLOC 1 : wahwah_control (machine d'état - contrôle LFO)
+--              Gère l'accumulateur de phase et le décalage de fréquence centrale
+--   - BLOC 2 : wahwah_operative (partie opérative - filtrage)
+--              ROM de coefficients + filtre biquad DF1
 --
--- Le LFO est un accumulateur de phase 32 bits dont les 8 bits de poids
--- fort indexent la ROM de 256 entrées.  La ROM encode directement la
--- trajectoire sinusoïdale avec balayage exponentiel : chaque adresse
--- correspond à un jeu de coefficients (b0, -a1, -a2) en Q1.14.
---
--- La vitesse du LFO est sélectionnable via I_lfo_speed_sel (3 bits,
--- 8 vitesses de 1.0 Hz à 10.0 Hz).
--------------------------------------------------------------------------------
+-- Cette séparation machine d'état / partie opérative permet :
+--   - Une meilleure modularité et réutilisabilité
+--   - Une vérification plus facile des deux parties indépendamment
+--   - Une compréhension claire du flux de données et de contrôle
+--------------------------------------------------------------------------------
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -35,99 +34,30 @@ end entity wahwahUnit;
 
 architecture arch_wahwahUnit of wahwahUnit is
 
-  -- ════════════════════════════════════════════════════════════
-  -- Constantes : incréments de phase LFO pour différentes fréquences
-  --
-  -- Formule : incr = round(f_lfo * 2^32 / fs)
-  -- avec fs = 48 000 Hz
-  -- ════════════════════════════════════════════════════════════
-  type lfo_incr_rom_t is array(0 to 7) of unsigned(31 downto 0);
-  constant LFO_INCR_ROM : lfo_incr_rom_t := (
-    to_unsigned(  89478, 32),   -- 0 : 1.0 Hz
-    to_unsigned( 178957, 32),   -- 1 : 2.0 Hz
-    to_unsigned( 268435, 32),   -- 2 : 3.0 Hz
-    to_unsigned( 357914, 32),   -- 3 : 4.0 Hz
-    to_unsigned( 447392, 32),   -- 4 : 5.0 Hz
-    to_unsigned( 581610, 32),   -- 5 : 6.5 Hz
-    to_unsigned( 715828, 32),   -- 6 : 8.0 Hz
-    to_unsigned( 894785, 32)    -- 7 : 10.0 Hz
-  );
-
-  -- ════════════════════════════════════════════════════════════
-  -- Signaux internes
-  -- ════════════════════════════════════════════════════════════
-
-  -- LFO : accumulateur de phase
-  signal SR_lfo_phase     : unsigned(31 downto 0) := (others => '0');
-  signal SR_center_offset : unsigned(7 downto 0)  := (others => '0');
-  signal SR_freq_step_cnt : unsigned(9 downto 0)  := (others => '0');
-  signal SC_lfo_addr_base : unsigned(7 downto 0);
-  signal SC_lfo_addr      : std_logic_vector(7 downto 0);
-  signal SC_lfo_incr      : unsigned(31 downto 0);
-
-  -- Coefficients issus de la ROM (BLOC 1)
-  signal SC_b0     : signed(15 downto 0);
-  signal SC_neg_a1 : signed(15 downto 0);
-  signal SC_neg_a2 : signed(15 downto 0);
+  -- Signaux d'interconnexion entre contrôle et opérative
+  signal S_lfo_addr : std_logic_vector(7 downto 0);
 
 begin
 
-  -- ────────────────────────────────────────────────────────────
-  -- Sélection de l'incrément LFO selon les switches
-  -- ────────────────────────────────────────────────────────────
-  SC_lfo_incr <= LFO_INCR_ROM(to_integer(unsigned(I_lfo_speed_sel)));
-
-  -- ────────────────────────────────────────────────────────────
-  -- LFO : accumulateur de phase 32 bits
-  -- Avance d'un incrément à chaque nouvel échantillon audio
-  -- ────────────────────────────────────────────────────────────
-  process (I_clock, I_reset)
-  begin
-    if I_reset = '1' then
-      SR_lfo_phase     <= (others => '0');
-      SR_center_offset <= (others => '0');
-      SR_freq_step_cnt <= (others => '0');
-    elsif rising_edge(I_clock) then
-      if I_inputSampleValid = '1' then
-        SR_lfo_phase <= SR_lfo_phase + SC_lfo_incr;
-
-        if I_freq_up /= I_freq_down then
-          if SR_freq_step_cnt = to_unsigned(1023, SR_freq_step_cnt'length) then
-            SR_freq_step_cnt <= (others => '0');
-            if I_freq_up = '1' then
-              SR_center_offset <= SR_center_offset + 1;
-            else
-              SR_center_offset <= SR_center_offset - 1;
-            end if;
-          else
-            SR_freq_step_cnt <= SR_freq_step_cnt + 1;
-          end if;
-        else
-          SR_freq_step_cnt <= (others => '0');
-        end if;
-      end if;
-    end if;
-  end process;
-
-  -- Les 8 bits de poids fort du phase accumulator → adresse ROM
-  SC_lfo_addr_base <= SR_lfo_phase(31 downto 24);
-  SC_lfo_addr <= std_logic_vector(SC_lfo_addr_base + SR_center_offset);
-
   -- ════════════════════════════════════════════════════════════
-  -- BLOC MATERIEL 1 : Calcul des coefficients (ROM combinatoire)
+  -- BLOC 1 : Contrôle (Machine d'état)
   -- ════════════════════════════════════════════════════════════
-  coeff_rom_inst : entity work.wahwah_coeff_rom
+  control_inst : entity work.wahwah_control
     port map (
-      I_address => SC_lfo_addr,
-      O_b0      => SC_b0,
-      O_neg_a1  => SC_neg_a1,
-      O_neg_a2  => SC_neg_a2
+      I_clock             => I_clock,
+      I_reset             => I_reset,
+      I_inputSampleValid  => I_inputSampleValid,
+      I_lfo_speed_sel     => I_lfo_speed_sel,
+      I_freq_up           => I_freq_up,
+      I_freq_down         => I_freq_down,
+      O_lfo_addr          => S_lfo_addr,
+      O_lfo_incr          => open  -- non utilisé dans l'architecture actuelle
     );
 
   -- ════════════════════════════════════════════════════════════
-  -- BLOC MATERIEL 2 : Equation de filtrage (biquad DF1)
+  -- BLOC 2 : Partie opérative (Chemin de données)
   -- ════════════════════════════════════════════════════════════
-  biquad_inst : entity work.wahwah_biquad
+  operative_inst : entity work.wahwah_operative
     generic map (
       FRAC_BITS => 14
     )
@@ -136,9 +66,7 @@ begin
       I_reset               => I_reset,
       I_inputSample         => I_inputSample,
       I_inputSampleValid    => I_inputSampleValid,
-      I_b0                  => SC_b0,
-      I_neg_a1              => SC_neg_a1,
-      I_neg_a2              => SC_neg_a2,
+      I_lfo_addr            => S_lfo_addr,
       O_filteredSample      => O_filteredSample,
       O_filteredSampleValid => O_filteredSampleValid
     );
