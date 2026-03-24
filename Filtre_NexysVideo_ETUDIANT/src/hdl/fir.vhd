@@ -12,7 +12,6 @@ entity fir is
     din          : in  std_logic_vector(dwidth-1 downto 0);
     dout         : out std_logic_vector(dwidth-1 downto 0);
     config_sw    : in  std_logic_vector(4 downto 0);  --inutilise dans le TP majeure
-    pot_pos      : in  std_logic_vector(7 downto 0);  -- position potentiomètre (XADC)
     clk          : in  std_logic;
     rst          : in  std_logic;
     ce           : in  std_logic;  -- signal de validation de din a la frequence des echantillons audio
@@ -32,7 +31,6 @@ end fir;
 -- Chemin de données interne : 24 bits signés (chaîne audio complète)
 -- config_sw(4)     : bypass (0 = dry, 1 = wah-wah)
 -- config_sw(2..0)  : vitesse du LFO (0.5 – 5.0 Hz)
--- config_sw(3)     : mode manuel (1 = pédale/pot, 0 = LFO auto)
 -- ═══════════════════════════════════════════════════════════════════
 
 architecture wahwah_arch of fir is
@@ -59,7 +57,9 @@ architecture wahwah_arch of fir is
   signal SR_lfo_phase : unsigned(31 downto 0) := (others => '0');
   signal SC_lfo_addr  : std_logic_vector(7 downto 0);
   signal SC_lfo_incr  : unsigned(31 downto 0);
-  signal SC_coeff_addr: std_logic_vector(7 downto 0);
+  signal SC_b0        : signed(23 downto 0);
+  signal SC_neg_a1    : signed(23 downto 0);
+  signal SC_neg_a2    : signed(23 downto 0);
 
 begin
 
@@ -79,23 +79,31 @@ begin
     end if;
   end process;
 
-  SC_lfo_addr   <= std_logic_vector(SR_lfo_phase(31 downto 24));
-  SC_coeff_addr <= pot_pos when config_sw(3) = '1' else SC_lfo_addr;
+  SC_lfo_addr <= std_logic_vector(SR_lfo_phase(31 downto 24));
 
-  -- Chemin interne sans dependances externes pour eviter les black boxes
-  process(clk, rst)
-  begin
-    if rst = '1' then
-      D_out       <= (others => '0');
-      S_out_valid <= '0';
-    elsif rising_edge(clk) then
-      S_out_valid <= '0';
-      if ce = '1' then
-        D_out       <= D_in;
-        S_out_valid <= '1';
-      end if;
-    end if;
-  end process;
+  coeff_rom_inst : entity work.wahwah_coeff_rom
+    port map (
+      I_address => SC_lfo_addr,
+      O_b0      => SC_b0,
+      O_neg_a1  => SC_neg_a1,
+      O_neg_a2  => SC_neg_a2
+    );
+
+  biquad_inst : entity work.wahwah_biquad
+    generic map (
+      FRAC_BITS => 22
+    )
+    port map (
+      I_clock               => clk,
+      I_reset               => rst,
+      I_inputSample         => D_in,
+      I_inputSampleValid    => ce,
+      I_b0                  => SC_b0,
+      I_neg_a1              => SC_neg_a1,
+      I_neg_a2              => SC_neg_a2,
+      O_filteredSample      => D_out,
+      O_filteredSampleValid => S_out_valid
+    );
 
   process(clk, rst)
   begin

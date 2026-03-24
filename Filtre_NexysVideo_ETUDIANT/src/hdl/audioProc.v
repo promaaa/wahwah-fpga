@@ -32,8 +32,6 @@ module audioProc(
 		 input 	sw5,
 		 input 	sw6,
 		 input 	sw7,
-       input  xa_n0,
-       input  xa_p0,
 		 output led3,
 		 output led4,
 		 output led5,
@@ -181,31 +179,21 @@ module audioProc(
    /////////////////////////////
    wire [23:0] inputLeftSample, inputRightSample,outputLeftSample,outputRightSample;
    wire [4:0] configSw;
-   wire [7:0] pot_pos;
    wire effect_on;
    wire speed_slow;
    wire speed_mid;
    wire speed_fast;
-
-   xadc_pot_reader xadc_pot_inst
-     (
-      .clk(clk_out_100MHZ),
-      .rst(rst),
-      .vauxp0(xa_p0),
-      .vauxn0(xa_n0),
-      .pot_pos(pot_pos)
-      );
 
    assign inputLeftSample = in_audioL;
    assign inputRightSample = in_audioR;
    assign speed_slow = buttons_db[1];
    assign speed_mid = buttons_db[2];
    assign speed_fast = buttons_db[4];
-   assign effect_on = sw7;
+   assign effect_on = speed_slow | speed_mid | speed_fast;
    assign {configSw[2], configSw[1], configSw[0]} = speed_fast ? 3'b110 :
                                                     speed_mid  ? 3'b011 :
                                                                  3'b000;
-   assign configSw[3]=sw6;
+   assign configSw[3]=1'b0;
    assign configSw[4]=effect_on;
    assign led3=speed_slow;
    assign led4=speed_mid;
@@ -218,7 +206,6 @@ module audioProc(
       .din(inputLeftSample),
       .dout(outputLeftSample),
       .config_sw(configSw),
-      .pot_pos(pot_pos),
       .clk(clk_out_100MHZ),
       .rst(rst),
       .ce(pulse48kHz),
@@ -233,7 +220,6 @@ module audioProc(
       .din(inputRightSample),
       .dout(outputRightSample),
       .config_sw(configSw),
-      .pot_pos(pot_pos),
       .clk(clk_out_100MHZ),
       .rst(rst),
       .ce(pulse48kHz),
